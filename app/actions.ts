@@ -484,7 +484,8 @@ export async function createTeacherAccount(userId: string, name: string, passwor
 
     const hashedPassword = await bcrypt.hash(passwordString, 10);
     
-    await prisma.user.create({
+    // We capture the newly created user to extract their database ID
+    const newUser = await prisma.user.create({
       data: {
         user_id: userId,
         name: name,
@@ -493,7 +494,8 @@ export async function createTeacherAccount(userId: string, name: string, passwor
       }
     });
 
-    return { success: true, message: "Teacher account successfully created." };
+    // Return the teacherId so the frontend can immediately assign a class to it
+    return { success: true, message: "Teacher account successfully created.", teacherId: newUser.id };
   } catch (error) {
     console.error("Teacher creation error:", error);
     return { success: false, message: "Failed to create teacher account." };
@@ -525,6 +527,22 @@ export async function createAdminSchedule(data: {
   } catch (error) {
     console.error("Schedule creation error:", error);
     return { success: false, message: "Failed to create the schedule." };
+  }
+}
+
+export async function assignTeacherToSchedule(scheduleId: number, teacherId: number, teacherName: string) {
+  try {
+    await prisma.schedule.update({
+      where: { id: scheduleId },
+      data: {
+        teacher_id: teacherId,
+        professor_name: teacherName,
+      }
+    });
+    return { success: true, message: "Class assigned successfully." };
+  } catch (error) {
+    console.error("Assign teacher error:", error);
+    return { success: false, message: "Failed to assign teacher to the schedule." };
   }
 }
 
@@ -787,5 +805,65 @@ export async function loginTeacher(userId: string, passwordString: string) {
   } catch (error) {
     console.error("Teacher login error:", error);
     return { success: false, message: "Server error during authentication." };
+  }
+}
+
+export async function assignTeacherToMultipleSchedules(scheduleIds: number[], teacherId: number, teacherName: string) {
+  try {
+    await prisma.schedule.updateMany({
+      where: {
+        id: {
+          in: scheduleIds
+        }
+      },
+      data: {
+        teacher_id: teacherId,
+        professor_name: teacherName,
+      }
+    });
+    
+    return { success: true, message: "Classes assigned successfully." };
+  } catch (error) {
+    console.error("Batch assignment error:", error);
+    return { success: false, message: "Failed to assign classes in bulk." };
+  }
+}
+
+export async function removeTeacherFromSchedule(scheduleId: number) {
+  try {
+    await prisma.schedule.update({
+      where: { id: scheduleId },
+      data: {
+        teacher_id: null,
+        professor_name: "Unassigned", // Resets the required string field
+      }
+    });
+    return { success: true, message: "Class removed from instructor." };
+  } catch (error) {
+    console.error("Remove teacher error:", error);
+    return { success: false, message: "Failed to remove class." };
+  }
+}
+
+export async function deleteTeacherAccount(teacherDbId: number) {
+  try {
+    // Safely unassign all classes from this teacher before deleting
+    await prisma.schedule.updateMany({
+      where: { teacher_id: teacherDbId },
+      data: { 
+        teacher_id: null, 
+        professor_name: "Unassigned" 
+      }
+    });
+
+    // Delete the teacher account
+    await prisma.user.delete({
+      where: { id: teacherDbId }
+    });
+
+    return { success: true, message: "Staff account permanently deleted." };
+  } catch (error) {
+    console.error("Delete teacher error:", error);
+    return { success: false, message: "Failed to delete the staff account." };
   }
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { get, set, del } from "idb-keyval";
 import { getAdminData, resetStudentDevice, loginAdmin, fetchAdminData } from "../actions";
 import { AttendanceLog, Student, Schedule } from "./types";
 import AttendanceTab from "./components/AttendanceTab";
@@ -9,6 +10,7 @@ import DevicesTab from "./components/DevicesTab";
 import TeachersTab from "./components/TeachersTab";
 
 export default function AdminDashboard() {
+  const [isInitializing, setIsInitializing] = useState<boolean>(true);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [adminId, setAdminId] = useState<string>("");
   const [password, setPassword] = useState<string>("");
@@ -24,11 +26,24 @@ export default function AdminDashboard() {
 
   const [activeTab, setActiveTab] = useState<"attendance" | "schedules" | "devices" | "staff">("attendance");
 
+  // Check for existing session on page load
   useEffect(() => {
-    if (isAuthenticated) {
-      fetchDashboardData();
+    async function initialize() {
+      try {
+        const storedId = await get("authenticated_admin_id");
+        if (storedId) {
+          setAdminId(storedId);
+          setIsAuthenticated(true);
+          await fetchDashboardData();
+        }
+      } catch (error) {
+        console.error("Initialization error:", error);
+      } finally {
+        setIsInitializing(false);
+      }
     }
-  }, [isAuthenticated]);
+    initialize();
+  }, []);
 
   async function fetchDashboardData() {
     const data = await getAdminData();
@@ -53,7 +68,9 @@ export default function AdminDashboard() {
       const response = await loginAdmin(adminId, password);
 
       if (response.success) {
+        await set("authenticated_admin_id", adminId); // Save session
         setIsAuthenticated(true);
+        fetchDashboardData();
       } else {
         setMessageType("error");
         setMessage(response.message);
@@ -65,6 +82,13 @@ export default function AdminDashboard() {
     } finally {
       setIsLoading(false);
     }
+  }
+
+  async function handleLogout() {
+    await del("authenticated_admin_id"); // Clear session
+    setIsAuthenticated(false);
+    setPassword("");
+    setAdminId("");
   }
 
   async function handleResetDevice(targetStudentId: string) {
@@ -79,6 +103,15 @@ export default function AdminDashboard() {
       }
       setIsLoading(false);
     }
+  }
+
+  // Prevent the login screen from flashing during initial load
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-[#011B51]"></div>
+      </div>
+    );
   }
 
   if (!isAuthenticated) {
@@ -175,7 +208,7 @@ export default function AdminDashboard() {
             </div>
           </div>
           <button 
-            onClick={() => { setIsAuthenticated(false); setPassword(""); setAdminId(""); }} 
+            onClick={handleLogout} 
             className="text-xs font-bold bg-[#A51A21] hover:bg-[#851319] text-white uppercase tracking-wider px-5 py-2.5 rounded-lg shadow-sm transition-colors border border-transparent hover:border-white/20 cursor-pointer mt-4 sm:mt-0"
           >
             Log Out
@@ -190,10 +223,18 @@ export default function AdminDashboard() {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-8 mt-8">
-        {activeTab === "attendance" && <AttendanceTab logs={logs} />}
-        {activeTab === "staff" && <TeachersTab teachers={teachers} refreshData={fetchDashboardData} />}
-        {activeTab === "schedules" && <SchedulesTab schedules={schedules} teachers={teachers} refreshData={fetchDashboardData} />}
-        {activeTab === "devices" && <DevicesTab students={students} onResetDevice={handleResetDevice} isLoading={isLoading} />}
+        <div className={activeTab === "attendance" ? "block" : "hidden"}>
+          <AttendanceTab logs={logs} />
+        </div>
+        <div className={activeTab === "staff" ? "block" : "hidden"}>
+          <TeachersTab teachers={teachers} schedules={schedules} refreshData={fetchDashboardData} />
+        </div>
+        <div className={activeTab === "schedules" ? "block" : "hidden"}>
+          <SchedulesTab schedules={schedules} teachers={teachers} refreshData={fetchDashboardData} />
+        </div>
+        <div className={activeTab === "devices" ? "block" : "hidden"}>
+          <DevicesTab students={students} onResetDevice={handleResetDevice} isLoading={isLoading} />
+        </div>
       </div>
     </main>
   );

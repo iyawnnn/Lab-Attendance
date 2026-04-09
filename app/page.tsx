@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FaUserGraduate, FaUserShield } from "react-icons/fa";
+import { FaUserGraduate, FaUserShield, FaChalkboardTeacher } from "react-icons/fa";
 
 export default function LandingPage() {
   return (
@@ -17,7 +17,7 @@ export default function LandingPage() {
       </div>
 
       {/* Main Frosted Glass Container */}
-      <div className="relative z-10 w-full max-w-4xl bg-white/30 backdrop-blur-xl border border-white/40 rounded-[2.5rem] px-6 pb-10 pt-16 sm:px-12 sm:pb-14 sm:pt-20 text-center shadow-2xl mt-[-5vh]">
+      <div className="relative z-10 w-full max-w-5xl bg-white/30 backdrop-blur-xl border border-white/40 rounded-[2.5rem] px-6 pb-10 pt-16 sm:px-12 sm:pb-14 sm:pt-20 text-center shadow-2xl mt-[-5vh]">
         
         {/* Overlapping Top Logo */}
         <div className="absolute -top-12 sm:-top-16 left-1/2 transform -translate-x-1/2">
@@ -36,11 +36,10 @@ export default function LandingPage() {
           Secure identity verification and attendance tracking.
         </p>
 
-        {/* CARDS */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl mx-auto">
+        {/* CARDS GRID (Updated to 3 columns) */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full mx-auto">
 
           {/* STUDENT PORTAL CARD */}
-          {/* Added: border-b-[6px] border-[#FED702] for the yellow line */}
           <Link
             href="/student"
             className="group flex flex-col items-start justify-center p-6 bg-[#011B51] text-white rounded-2xl transition-all duration-300 shadow-md hover:shadow-xl hover:-translate-y-1 border-b-[6px] border-[#FED702]"
@@ -58,8 +57,25 @@ export default function LandingPage() {
             </p>
           </Link>
 
+          {/* TEACHER PORTAL CARD */}
+          <Link
+            href="/teacher"
+            className="group flex flex-col items-start justify-center p-6 bg-white text-[#011B51] rounded-2xl transition-all duration-300 shadow-md hover:shadow-xl hover:-translate-y-1 border-b-[6px] border-[#011B51]"
+          >
+            {/* ICON */}
+            <div className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-100 mb-3 shadow-sm">
+              <FaChalkboardTeacher className="w-5 h-5 text-[#011B51]" />
+            </div>
+
+            <h2 className="text-lg font-bold mb-1">
+              Faculty Access
+            </h2>
+            <p className="text-sm text-slate-500">
+              Manage sessions & verify logs
+            </p>
+          </Link>
+
           {/* ADMIN ACCESS CARD */}
-          {/* Added: border-b-[6px] border-[#A51A21] for the red line */}
           <Link
             href="/admin"
             className="group flex flex-col items-start justify-center p-6 bg-gray-200 text-[#011B51] rounded-2xl transition-all duration-300 shadow-md hover:shadow-xl hover:-translate-y-1 border-b-[6px] border-[#A51A21]"
@@ -70,10 +86,10 @@ export default function LandingPage() {
             </div>
 
             <h2 className="text-lg font-bold mb-1">
-              Admin Access
+              System Admin
             </h2>
             <p className="text-sm text-gray-600">
-              Manage logs and devices
+              Manage database and staff
             </p>
           </Link>
 
