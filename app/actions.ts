@@ -458,13 +458,12 @@ export async function createAdminSchedule(data: {
   }
 }
 
-export async function assignTeacherToSchedule(scheduleId: number, teacherId: number, teacherName: string) {
+export async function assignTeacherToSchedule(scheduleId: number, teacherId: number) {
   try {
     await prisma.schedule.update({
       where: { id: scheduleId },
       data: {
         teacher_id: teacherId,
-        professor_name: teacherName,
       }
     });
     return { success: true, message: "Class assigned successfully." };
@@ -480,7 +479,6 @@ export async function createSchedule(data: {
   schedule: string;
   course_code: string;
   section: string;
-  professor_name: string;
 }) {
   try {
     await prisma.schedule.create({
@@ -490,7 +488,6 @@ export async function createSchedule(data: {
         schedule: data.schedule,
         course_code: data.course_code,
         section: data.section,
-        professor_name: data.professor_name,
       },
     });
     return { success: true, message: "Class schedule created successfully." };
@@ -508,7 +505,6 @@ export async function updateSchedule(
     schedule: string;
     course_code: string;
     section: string;
-    professor_name: string;
   },
 ) {
   try {
@@ -520,7 +516,6 @@ export async function updateSchedule(
         schedule: data.schedule,
         course_code: data.course_code,
         section: data.section,
-        professor_name: data.professor_name,
       },
     });
     return { success: true, message: "Class schedule updated successfully." };
@@ -669,22 +664,26 @@ export async function registerStaffDevice(data: {
 
 export async function getTeacherDashboardData(teacherUserId: string) {
   try {
+    // Step A: Find the teacher's internal database ID
+    const teacher = await prisma.user.findUnique({
+      where: { user_id: teacherUserId }
+    });
+
+    if (!teacher) {
+      return { success: false, schedules: [] };
+    }
+
+    // Step B: Fetch schedules using the direct integer ID
     const schedules = await prisma.schedule.findMany({
       where: {
-        teacher: {
-          user_id: teacherUserId,
-        },
+        teacher_id: teacher.id
       },
       include: {
         attendances: {
-          include: {
-            student: true,
-          },
-          orderBy: {
-            timestamp: "desc",
-          },
-        },
-      },
+          include: { student: true },
+          orderBy: { timestamp: "desc" }
+        }
+      }
     });
 
     return { success: true, schedules };
@@ -752,16 +751,13 @@ export async function removeTeacherFromSchedule(scheduleId: number) {
 
 export async function deleteTeacherAccount(teacherDbId: number) {
   try {
-    // Safely unassign all classes from this teacher before deleting
     await prisma.schedule.updateMany({
       where: { teacher_id: teacherDbId },
       data: { 
         teacher_id: null, 
-        professor_name: "Unassigned" 
       }
     });
 
-    // Delete the teacher account
     await prisma.user.delete({
       where: { id: teacherDbId }
     });
@@ -772,7 +768,6 @@ export async function deleteTeacherAccount(teacherDbId: number) {
     return { success: false, message: "Failed to delete the staff account." };
   }
 }
-
 export async function changeTeacherPassword(teacherUserId: string, currentPass: string, newPass: string) {
   try {
     const user = await prisma.user.findFirst({
