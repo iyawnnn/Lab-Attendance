@@ -10,10 +10,14 @@ async function main() {
   await prisma.student.deleteMany();
   await prisma.user.deleteMany(); 
 
+  const adminPassword = process.env.DEFAULT_ADMIN_PASSWORD || "admin123";
+  const teacherPassword = process.env.DEFAULT_TEACHER_PASSWORD || "teacher123";
+
   const admin = await prisma.user.create({
     data: {
       user_id: "MASTER_ADMIN",
-      public_key: "PENDING_REGISTRATION", 
+      password: adminPassword, 
+      name: "System Admin",
       role: "ADMIN"
     }
   });
@@ -21,7 +25,8 @@ async function main() {
   const teacher = await prisma.user.create({
     data: {
       user_id: "DEFAULT_TEACHER",
-      public_key: "PENDING_REGISTRATION",
+      password: teacherPassword,
+      name: "Default Professor",
       role: "TEACHER"
     }
   });

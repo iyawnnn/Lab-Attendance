@@ -13,12 +13,13 @@ enum Role {
 }
 
 model User {
-  id         Int        @id @default(autoincrement())
-  user_id    String     @unique 
-  public_key String     @db.Text
-  role       Role       @default(TEACHER)
+  id       Int    @id @default(autoincrement())
+  user_id  String @unique 
+  password String 
+  name     String 
+  role     Role   @default(TEACHER)
   
-  schedules  Schedule[]
+  schedules Schedule[]
 }
 
 model Schedule {
