@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { get, set, del } from "idb-keyval";
-import { loginTeacher, getTeacherDashboardData } from "../actions";
+import { loginTeacher, getTeacherDashboardData, changeTeacherPassword } from "../actions";
 import SessionTab from "./components/SessionTab";
 import SchedulesTab from "./components/SchedulesTab";
 import AttendanceTab from "./components/AttendanceTab";
@@ -24,6 +24,14 @@ export default function TeacherDashboard() {
   const [messageType, setMessageType] = useState<"error" | "success">("error");
 
   const [activeTab, setActiveTab] = useState<"session" | "schedules" | "attendance">("session");
+
+  // Settings Modal State
+  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [currentPassword, setCurrentPassword] = useState<string>("");
+  const [newPassword, setNewPassword] = useState<string>("");
+  const [confirmPassword, setConfirmPassword] = useState<string>("");
+  const [settingsMessage, setSettingsMessage] = useState<string>("");
+  const [isSettingsProcessing, setIsSettingsProcessing] = useState<boolean>(false);
 
   useEffect(() => {
     async function initialize() {
@@ -99,6 +107,37 @@ export default function TeacherDashboard() {
     setActiveTeacherId("");
     setSchedules([]);
     setLogs([]);
+  }
+
+  async function handlePasswordChange(e: React.FormEvent) {
+    e.preventDefault();
+    if (newPassword !== confirmPassword) {
+      setSettingsMessage("New passwords do not match.");
+      return;
+    }
+    if (newPassword.length < 8) {
+      setSettingsMessage("New password must be at least 8 characters long.");
+      return;
+    }
+
+    setIsSettingsProcessing(true);
+    setSettingsMessage("");
+
+    const response = await changeTeacherPassword(activeTeacherId, currentPassword, newPassword);
+    
+    setSettingsMessage(response.message);
+    
+    if (response.success) {
+      setTimeout(() => {
+        setIsSettingsOpen(false);
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+        setSettingsMessage("");
+      }, 2000);
+    }
+    
+    setIsSettingsProcessing(false);
   }
 
   if (isInitializing) {
@@ -192,7 +231,7 @@ export default function TeacherDashboard() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 pb-12 font-sans">
+    <main className="min-h-screen bg-slate-50 pb-12 font-sans relative">
       <header className="bg-[#011B51] border-b-4 border-[#FED702] pt-8 pb-4 px-4 sm:px-8 shadow-md relative z-20">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-start sm:items-end">
           <div className="flex items-center space-x-4">
@@ -202,13 +241,23 @@ export default function TeacherDashboard() {
               <p className="text-[#FED702] text-xs font-bold uppercase tracking-widest mt-1">ID: {activeTeacherId}</p>
             </div>
           </div>
-          <button 
-            onClick={handleLogout} 
-            className="text-xs font-bold bg-[#A51A21] hover:bg-[#851319] text-white uppercase tracking-wider px-5 py-2.5 rounded-lg shadow-sm transition-colors border border-transparent hover:border-white/20 cursor-pointer mt-4 sm:mt-0"
-          >
-            Log Out
-          </button>
+          
+          <div className="flex items-center space-x-3 mt-4 sm:mt-0">
+            <button 
+              onClick={() => setIsSettingsOpen(true)} 
+              className="text-xs font-bold bg-white/10 hover:bg-white/20 text-white uppercase tracking-wider px-5 py-2.5 rounded-lg shadow-sm transition-colors border border-transparent cursor-pointer"
+            >
+              Security Settings
+            </button>
+            <button 
+              onClick={handleLogout} 
+              className="text-xs font-bold bg-[#A51A21] hover:bg-[#851319] text-white uppercase tracking-wider px-5 py-2.5 rounded-lg shadow-sm transition-colors border border-transparent cursor-pointer"
+            >
+              Log Out
+            </button>
+          </div>
         </div>
+        
         <div className="max-w-7xl mx-auto mt-8 flex space-x-6 sm:space-x-8 overflow-x-auto no-scrollbar">
           <button onClick={() => setActiveTab("session")} className={`pb-3 text-xs sm:text-sm font-bold uppercase tracking-wider border-b-2 transition-colors ${activeTab === "session" ? "border-white text-white" : "border-transparent text-white/50 hover:text-white/80 cursor-pointer whitespace-nowrap"}`}>Active Session</button>
           <button onClick={() => setActiveTab("schedules")} className={`pb-3 text-xs sm:text-sm font-bold uppercase tracking-wider border-b-2 transition-colors ${activeTab === "schedules" ? "border-white text-white" : "border-transparent text-white/50 hover:text-white/80 cursor-pointer whitespace-nowrap"}`}>My Classes</button>
@@ -227,6 +276,60 @@ export default function TeacherDashboard() {
           <AttendanceTab logs={logs} />
         </div>
       </div>
+
+      {/* SECURITY SETTINGS MODAL */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 bg-[#011B51]/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 sm:p-8">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 border-t-8 border-[#FED702]">
+            <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <div>
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Account Security</h3>
+                <h2 className="text-xl font-black text-[#011B51] uppercase tracking-tight">Change Password</h2>
+              </div>
+              <button 
+                onClick={() => {
+                  setIsSettingsOpen(false);
+                  setSettingsMessage("");
+                  setCurrentPassword("");
+                  setNewPassword("");
+                  setConfirmPassword("");
+                }} 
+                className="text-slate-400 hover:text-[#011B51] font-black text-2xl cursor-pointer"
+              >
+                &times;
+              </button>
+            </div>
+            
+            <div className="p-6">
+              <form onSubmit={handlePasswordChange} className="space-y-4">
+                <div>
+                  <label className="block text-[10px] sm:text-xs font-bold text-[#011B51] uppercase tracking-wide mb-1.5 ml-1">Current Password</label>
+                  <input type="password" required className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 outline-none text-sm font-medium focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
+                </div>
+                <div>
+                  <label className="block text-[10px] sm:text-xs font-bold text-[#011B51] uppercase tracking-wide mb-1.5 ml-1">New Password</label>
+                  <input type="password" required className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 outline-none text-sm font-medium focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+                </div>
+                <div>
+                  <label className="block text-[10px] sm:text-xs font-bold text-[#011B51] uppercase tracking-wide mb-1.5 ml-1">Confirm New Password</label>
+                  <input type="password" required className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 outline-none text-sm font-medium focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+                </div>
+
+                {settingsMessage && (
+                  <div className={`p-3 rounded-xl text-center text-[10px] font-bold uppercase tracking-wide border-2 ${settingsMessage.includes("successfully") || settingsMessage.includes("securely") ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
+                    {settingsMessage}
+                  </div>
+                )}
+
+                <button type="submit" disabled={isSettingsProcessing} className="w-full bg-[#011B51] hover:bg-[#022a7a] text-white font-bold py-3.5 rounded-xl mt-6 transition-all shadow-md border-b-4 border-[#A51A21] disabled:opacity-70 text-xs uppercase tracking-wider cursor-pointer">
+                  {isSettingsProcessing ? "Updating..." : "Update Password"}
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
     </main>
   );
 }

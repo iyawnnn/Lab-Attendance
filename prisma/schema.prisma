@@ -29,14 +29,12 @@ model Schedule {
   schedule       String
   course_code    String
   section        String
-  professor_name String
-  
-  teacher_id     Int?
-  teacher        User?           @relation(fields: [teacher_id], references: [id])
-  
+
   active_pin     String?
   pin_expires_at DateTime?
 
+  teacher_id     Int?
+  teacher        User?           @relation(fields: [teacher_id], references: [id])
   attendances    AttendanceLog[]
 }
 
