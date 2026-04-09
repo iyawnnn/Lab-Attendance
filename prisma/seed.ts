@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import * as fs from 'fs';
 import * as path from 'path';
+import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
@@ -8,15 +9,19 @@ async function main() {
   await prisma.attendanceLog.deleteMany();
   await prisma.schedule.deleteMany();
   await prisma.student.deleteMany();
-  await prisma.user.deleteMany(); 
+  await prisma.user.deleteMany();
 
-  const adminPassword = process.env.DEFAULT_ADMIN_PASSWORD || "admin123";
-  const teacherPassword = process.env.DEFAULT_TEACHER_PASSWORD || "teacher123";
+  const adminPasswordRaw = process.env.DEFAULT_ADMIN_PASSWORD || "admin123";
+  const teacherPasswordRaw = process.env.DEFAULT_TEACHER_PASSWORD || "teacher123";
+
+  const saltRounds = 10;
+  const adminPasswordHashed = await bcrypt.hash(adminPasswordRaw, saltRounds);
+  const teacherPasswordHashed = await bcrypt.hash(teacherPasswordRaw, saltRounds);
 
   const admin = await prisma.user.create({
     data: {
       user_id: "MASTER_ADMIN",
-      password: adminPassword, 
+      password: adminPasswordHashed,
       name: "System Admin",
       role: "ADMIN"
     }
@@ -25,7 +30,7 @@ async function main() {
   const teacher = await prisma.user.create({
     data: {
       user_id: "DEFAULT_TEACHER",
-      password: teacherPassword,
+      password: teacherPasswordHashed,
       name: "Default Professor",
       role: "TEACHER"
     }
@@ -43,7 +48,7 @@ async function main() {
         course_code: item.course_code,
         section: item.section,
         professor_name: item.professor_name,
-        teacher_id: teacher.id, 
+        teacher_id: teacher.id,
       }
     });
   }

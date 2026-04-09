@@ -1,25 +1,28 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getAdminData, resetStudentDevice, verifyAdminSecret } from "../actions";
+import { getAdminData, resetStudentDevice, loginAdmin, fetchAdminData } from "../actions";
 import { AttendanceLog, Student, Schedule } from "./types";
 import AttendanceTab from "./components/AttendanceTab";
 import SchedulesTab from "./components/SchedulesTab";
 import DevicesTab from "./components/DevicesTab";
+import TeachersTab from "./components/TeachersTab";
 
 export default function AdminDashboard() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [adminId, setAdminId] = useState<string>("");
   const [password, setPassword] = useState<string>("");
   
   const [logs, setLogs] = useState<AttendanceLog[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [teachers, setTeachers] = useState<any[]>([]);
   
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [message, setMessage] = useState<string>("");
   const [messageType, setMessageType] = useState<"error" | "success">("error");
 
-  const [activeTab, setActiveTab] = useState<"attendance" | "schedules" | "devices">("attendance");
+  const [activeTab, setActiveTab] = useState<"attendance" | "schedules" | "devices" | "staff">("attendance");
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -32,7 +35,12 @@ export default function AdminDashboard() {
     if (data.success) {
       setLogs(data.logs || []);
       setStudents(data.students || []);
-      setSchedules(data.schedules || []);
+    }
+    
+    const relationalData = await fetchAdminData();
+    if (relationalData.success) {
+      setTeachers(relationalData.teachers || []);
+      setSchedules(relationalData.schedules || []);
     }
   }
 
@@ -42,7 +50,7 @@ export default function AdminDashboard() {
     setMessage("");
 
     try {
-      const response = await verifyAdminSecret(password);
+      const response = await loginAdmin(adminId, password);
 
       if (response.success) {
         setIsAuthenticated(true);
@@ -106,10 +114,22 @@ export default function AdminDashboard() {
               <div className="mb-8 lg:mb-10 text-center lg:text-left">
                 <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-[#011B51] uppercase tracking-tight">Admin Access</h2>
                 <div className="w-12 lg:w-16 h-1 lg:h-1.5 bg-[#011B51] mt-3 lg:mt-4 mb-2 lg:mb-3 rounded-full mx-auto lg:mx-0"></div>
-                <p className="text-slate-500 text-xs sm:text-sm font-semibold uppercase tracking-wide">Enter administrative secret to proceed.</p>
+                <p className="text-slate-500 text-xs sm:text-sm font-semibold uppercase tracking-wide">Enter administrative credentials to proceed.</p>
               </div>
 
               <form onSubmit={handleAuth} className="space-y-4 lg:space-y-6">
+                <div>
+                  <label className="block text-[10px] sm:text-xs font-bold text-[#011B51] uppercase tracking-wide mb-2 ml-1">Admin ID</label>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. MASTER_ADMIN" 
+                    className="w-full px-5 py-4 rounded-xl bg-slate-50 border border-slate-200 outline-none text-sm font-medium focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all shadow-sm" 
+                    value={adminId} 
+                    onChange={(e) => setAdminId(e.target.value)} 
+                    required 
+                  />
+                </div>
+
                 <div>
                   <label className="block text-[10px] sm:text-xs font-bold text-[#011B51] uppercase tracking-wide mb-2 ml-1">Master Password</label>
                   <input 
@@ -132,7 +152,7 @@ export default function AdminDashboard() {
               </form>
 
               {message && (
-                <div className="mt-8 p-4 rounded-xl text-center text-xs font-bold uppercase tracking-wide border-2 bg-rose-50 text-rose-700 border-rose-200">
+                <div className={`mt-8 p-4 rounded-xl text-center text-xs font-bold uppercase tracking-wide border-2 ${messageType === "error" ? "bg-rose-50 text-rose-700 border-rose-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"}`}>
                   {message}
                 </div>
               )}
@@ -155,22 +175,24 @@ export default function AdminDashboard() {
             </div>
           </div>
           <button 
-            onClick={() => { setIsAuthenticated(false); setPassword(""); }} 
+            onClick={() => { setIsAuthenticated(false); setPassword(""); setAdminId(""); }} 
             className="text-xs font-bold bg-[#A51A21] hover:bg-[#851319] text-white uppercase tracking-wider px-5 py-2.5 rounded-lg shadow-sm transition-colors border border-transparent hover:border-white/20 cursor-pointer mt-4 sm:mt-0"
           >
             Log Out
           </button>
         </div>
         <div className="max-w-7xl mx-auto mt-8 flex space-x-6 sm:space-x-8 overflow-x-auto no-scrollbar">
-          <button onClick={() => setActiveTab("attendance")} className={`pb-3 text-xs sm:text-sm font-bold uppercase tracking-wider border-b-2 transition-colors ${activeTab === "attendance" ? "border-white text-white" : "border-transparent text-white/50 hover:text-white/80 cursor-pointer"}`}>Attendance Records</button>
-          <button onClick={() => setActiveTab("schedules")} className={`pb-3 text-xs sm:text-sm font-bold uppercase tracking-wider border-b-2 transition-colors ${activeTab === "schedules" ? "border-white text-white" : "border-transparent text-white/50 hover:text-white/80 cursor-pointer"}`}>System Schedules</button>
-          <button onClick={() => setActiveTab("devices")} className={`pb-3 text-xs sm:text-sm font-bold uppercase tracking-wider border-b-2 transition-colors ${activeTab === "devices" ? "border-white text-white" : "border-transparent text-white/50 hover:text-white/80 cursor-pointer"}`}>Device Management</button>
+          <button onClick={() => setActiveTab("attendance")} className={`pb-3 text-xs sm:text-sm font-bold uppercase tracking-wider border-b-2 transition-colors ${activeTab === "attendance" ? "border-white text-white" : "border-transparent text-white/50 hover:text-white/80 cursor-pointer whitespace-nowrap"}`}>Attendance</button>
+          <button onClick={() => setActiveTab("staff")} className={`pb-3 text-xs sm:text-sm font-bold uppercase tracking-wider border-b-2 transition-colors ${activeTab === "staff" ? "border-white text-white" : "border-transparent text-white/50 hover:text-white/80 cursor-pointer whitespace-nowrap"}`}>Staff Management</button>
+          <button onClick={() => setActiveTab("schedules")} className={`pb-3 text-xs sm:text-sm font-bold uppercase tracking-wider border-b-2 transition-colors ${activeTab === "schedules" ? "border-white text-white" : "border-transparent text-white/50 hover:text-white/80 cursor-pointer whitespace-nowrap"}`}>Schedules</button>
+          <button onClick={() => setActiveTab("devices")} className={`pb-3 text-xs sm:text-sm font-bold uppercase tracking-wider border-b-2 transition-colors ${activeTab === "devices" ? "border-white text-white" : "border-transparent text-white/50 hover:text-white/80 cursor-pointer whitespace-nowrap"}`}>Devices</button>
         </div>
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-8 mt-8">
         {activeTab === "attendance" && <AttendanceTab logs={logs} />}
-        {activeTab === "schedules" && <SchedulesTab schedules={schedules} refreshData={fetchDashboardData} />}
+        {activeTab === "staff" && <TeachersTab teachers={teachers} refreshData={fetchDashboardData} />}
+        {activeTab === "schedules" && <SchedulesTab schedules={schedules} teachers={teachers} refreshData={fetchDashboardData} />}
         {activeTab === "devices" && <DevicesTab students={students} onResetDevice={handleResetDevice} isLoading={isLoading} />}
       </div>
     </main>

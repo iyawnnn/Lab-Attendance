@@ -2,6 +2,7 @@
 
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { randomInt } from "crypto";
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
 const prisma = globalForPrisma.prisma || new PrismaClient();
@@ -178,6 +179,7 @@ export async function submitAttendance(data: {
   labRoom: string;
   timestamp: string;
   signature: string;
+  roomPin: string;
 }) {
   try {
     const student = await prisma.student.findUnique({
@@ -194,8 +196,7 @@ export async function submitAttendance(data: {
     if (!student.public_key || student.public_key === "") {
       return {
         success: false,
-        message:
-          "DEVICE_REVOKED: Your device access has been revoked. Please re-register.",
+        message: "DEVICE_REVOKED: Your device access has been revoked. Please re-register.",
       };
     }
 
@@ -215,7 +216,6 @@ export async function submitAttendance(data: {
         .map((c) => c.charCodeAt(0)),
     );
 
-    // FIX 1: Added globalThis to prevent Node.js crashes
     const importedPublicKey = await globalThis.crypto.subtle.importKey(
       "spki",
       binaryPublicKey,
@@ -224,7 +224,6 @@ export async function submitAttendance(data: {
       ["verify"],
     );
 
-    // FIX 1: Added globalThis here as well
     const isValid = await globalThis.crypto.subtle.verify(
       { name: "ECDSA", hash: { name: "SHA-256" } },
       importedPublicKey,
@@ -268,25 +267,23 @@ export async function submitAttendance(data: {
       },
     });
 
-    let matchedScheduleId = null;
+    let matchedSchedule = null;
     let attendanceStatus = "ON_TIME";
 
     for (const sched of activeSchedules) {
-      // FIX 2: Bulletproof splitting for schedules.json formatting
       const [startStr, endStr] = sched.schedule.split(/\s*-\s*/);
 
       if (!startStr || !endStr) continue;
 
       const classStartMins = convertTimeToMinutes(startStr);
       const classEndMins = convertTimeToMinutes(endStr);
-
       const allowedStartMins = classStartMins - 15;
 
       if (
         currentMinutesSinceMidnight >= allowedStartMins &&
         currentMinutesSinceMidnight <= classEndMins
       ) {
-        matchedScheduleId = sched.id;
+        matchedSchedule = sched;
 
         if (currentMinutesSinceMidnight > classStartMins + 15) {
           attendanceStatus = "LATE";
@@ -295,11 +292,24 @@ export async function submitAttendance(data: {
       }
     }
 
-    if (!matchedScheduleId) {
+    if (!matchedSchedule) {
       return {
         success: false,
-        message:
-          "Error: No active class session found for you in this room at this current time.",
+        message: "Error: No active class session found for you in this room at this current time.",
+      };
+    }
+
+    if (!matchedSchedule.active_pin || matchedSchedule.active_pin !== data.roomPin) {
+      return {
+        success: false,
+        message: "Invalid room PIN.",
+      };
+    }
+
+    if (!matchedSchedule.pin_expires_at || new Date() > new Date(matchedSchedule.pin_expires_at)) {
+      return {
+        success: false,
+        message: "The room PIN has expired. Please ask your instructor to generate a new one.",
       };
     }
 
@@ -308,7 +318,7 @@ export async function submitAttendance(data: {
     const existingLog = await prisma.attendanceLog.findFirst({
       where: {
         student_id: data.studentId,
-        schedule_id: matchedScheduleId,
+        schedule_id: matchedSchedule.id,
         timestamp: {
           gte: twelveHoursAgo,
         },
@@ -322,11 +332,10 @@ export async function submitAttendance(data: {
       };
     }
 
-    // 4. Save the Verified and Time-Checked Record
     await prisma.attendanceLog.create({
       data: {
         student_id: data.studentId,
-        schedule_id: matchedScheduleId,
+        schedule_id: matchedSchedule.id,
         status: attendanceStatus,
         signature: data.signature,
       },
@@ -410,26 +419,112 @@ export async function registerAdmin(adminId: string, password: string) {
   }
 }
 
-export async function loginAdmin(adminId: string, password: string) {
+export async function loginAdmin(userId: string, passwordString: string) {
   try {
-    const admin = await prisma.admin.findUnique({
-      where: { admin_id: adminId },
+    const user = await prisma.user.findUnique({
+      where: { user_id: userId },
     });
 
-    if (!admin) {
-      return { success: false, message: "Invalid Admin ID or password." };
+    if (!user || user.role !== "ADMIN") {
+      return { success: false, message: "Invalid administrative credentials." };
     }
 
-    const isMatch = await bcrypt.compare(password, admin.password);
+    const isMatch = await bcrypt.compare(passwordString, user.password);
 
     if (!isMatch) {
-      return { success: false, message: "Invalid Admin ID or password." };
+      return { success: false, message: "Invalid administrative credentials." };
     }
 
-    return { success: true, message: "Login successful." };
+    return { 
+      success: true, 
+      adminId: user.user_id,
+      name: user.name
+    };
   } catch (error) {
     console.error("Admin login error:", error);
-    return { success: false, message: "Server error during verification." };
+    return { success: false, message: "Server error during authentication." };
+  }
+}
+
+export async function fetchAdminData() {
+  try {
+    const teachers = await prisma.user.findMany({
+      where: { role: "TEACHER" },
+      select: { id: true, user_id: true, name: true }
+    });
+    
+    const schedules = await prisma.schedule.findMany({
+      include: { 
+        teacher: { select: { name: true, user_id: true } } 
+      },
+      orderBy: [{ date: 'asc' }, { lab_room: 'asc' }]
+    });
+    
+    const logs = await prisma.attendanceLog.findMany({
+      include: { student: true, schedule: true },
+      orderBy: { timestamp: "desc" }
+    });
+
+    return { success: true, teachers, schedules, logs };
+  } catch (error) {
+    console.error("Admin data fetch error:", error);
+    return { success: false, teachers: [], schedules: [], logs: [] };
+  }
+}
+
+export async function createTeacherAccount(userId: string, name: string, passwordString: string) {
+  try {
+    const existingUser = await prisma.user.findUnique({
+      where: { user_id: userId }
+    });
+
+    if (existingUser) {
+      return { success: false, message: "This User ID is already registered." };
+    }
+
+    const hashedPassword = await bcrypt.hash(passwordString, 10);
+    
+    await prisma.user.create({
+      data: {
+        user_id: userId,
+        name: name,
+        password: hashedPassword,
+        role: "TEACHER"
+      }
+    });
+
+    return { success: true, message: "Teacher account successfully created." };
+  } catch (error) {
+    console.error("Teacher creation error:", error);
+    return { success: false, message: "Failed to create teacher account." };
+  }
+}
+
+export async function createAdminSchedule(data: { 
+  lab_room: string; 
+  date: string; 
+  schedule: string; 
+  course_code: string; 
+  section: string; 
+  teacher_id: number;
+  professor_name: string;
+}) {
+  try {
+    await prisma.schedule.create({
+      data: {
+        lab_room: data.lab_room,
+        date: data.date,
+        schedule: data.schedule,
+        course_code: data.course_code,
+        section: data.section,
+        professor_name: data.professor_name,
+        teacher_id: data.teacher_id,
+      }
+    });
+    return { success: true, message: "Class schedule created and assigned securely." };
+  } catch (error) {
+    console.error("Schedule creation error:", error);
+    return { success: false, message: "Failed to create the schedule." };
   }
 }
 
@@ -572,5 +667,125 @@ export async function checkRevokedStatus(studentId: string) {
     return { isRevoked: false };
   } catch (error) {
     return { isRevoked: false };
+  }
+}
+
+export async function generateSessionPin(scheduleId: number, teacherUserId: string) {
+  try {
+    const schedule = await prisma.schedule.findUnique({
+      where: { id: scheduleId },
+      include: { teacher: true },
+    });
+
+    if (!schedule || !schedule.teacher || schedule.teacher.user_id !== teacherUserId) {
+      return { success: false, message: "Unauthorized or schedule not found." };
+    }
+
+    if (schedule.teacher.role !== "TEACHER") {
+      return { success: false, message: "Insufficient permissions to generate a session PIN." };
+    }
+
+    const pin = randomInt(1000, 10000).toString();
+    const expirationTimeMs = Number(process.env.PIN_EXPIRATION_MS || 60000);
+    const pinExpiresAt = new Date(Date.now() + expirationTimeMs);
+
+    await prisma.schedule.update({
+      where: { id: scheduleId },
+      data: {
+        active_pin: pin,
+        pin_expires_at: pinExpiresAt,
+      },
+    });
+
+    return { success: true, pin, expiresAt: pinExpiresAt };
+  } catch (error) {
+    console.error("Session PIN generation error:", error);
+    return { success: false, message: "Server error generating session PIN." };
+  }
+}
+
+export async function registerStaffDevice(data: {
+  userId: string;
+  publicKey: string;
+}) {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { user_id: data.userId },
+    });
+
+    if (!user) {
+      return { success: false, message: "User identity not found in the system." };
+    }
+
+    await prisma.user.update({
+      where: { user_id: data.userId },
+      data: {
+        public_key: data.publicKey,
+      } as any, 
+    });
+
+    return { success: true, message: "Staff device securely registered." };
+  } catch (error) {
+    console.error("Staff device registration error:", error);
+    return { success: false, message: "Failed to register staff device." };
+  }
+}
+
+export async function getTeacherDashboardData(teacherUserId: string) {
+  try {
+    const schedules = await prisma.schedule.findMany({
+      where: {
+        teacher: {
+          user_id: teacherUserId,
+        },
+      },
+      include: {
+        attendances: {
+          include: {
+            student: true,
+          },
+          orderBy: {
+            timestamp: "desc",
+          },
+        },
+      },
+    });
+
+    return { success: true, schedules };
+  } catch (error) {
+    console.error("Teacher data fetch error:", error);
+    return { success: false, schedules: [] };
+  }
+}
+
+export async function loginTeacher(userId: string, passwordString: string) {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { user_id: userId },
+    });
+
+    if (!user) {
+      return { success: false, message: "Invalid credentials." };
+    }
+
+    if (user.role !== "TEACHER" && user.role !== "ADMIN") {
+      return { success: false, message: "Unauthorized access level." };
+    }
+
+    const isMatch = await bcrypt.compare(passwordString, user.password);
+
+    if (!isMatch) {
+      return { success: false, message: "Invalid credentials." };
+    }
+
+    return { 
+      success: true, 
+      message: "Authentication successful.",
+      teacherId: user.user_id,
+      name: user.name
+    };
+  } catch (error) {
+    console.error("Teacher login error:", error);
+    return { success: false, message: "Server error during authentication." };
   }
 }

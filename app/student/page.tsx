@@ -11,9 +11,6 @@ import {
 } from "../actions";
 
 export default function SmartStudentPortal() {
-  // =========================================================================
-  // 100% UNCHANGED LOGIC & STATE
-  // =========================================================================
   const [view, setView] = useState<"loading" | "register" | "attendance" | "recovery">("loading");
 
   const [studentId, setStudentId] = useState("");
@@ -24,6 +21,10 @@ export default function SmartStudentPortal() {
 
   const [labRooms, setLabRooms] = useState<string[]>([]);
   const [selectedRoom, setSelectedRoom] = useState("");
+  
+  // NEW: State for the 60-second Room PIN
+  const [roomPin, setRoomPin] = useState("");
+  
   const [isLogging, setIsLogging] = useState(false);
 
   const [message, setMessage] = useState("");
@@ -32,31 +33,21 @@ export default function SmartStudentPortal() {
 
   const [philippineTime, setPhilippineTime] = useState("");
 
-  // Display Student ID
   const [registeredId, setRegisteredId] = useState<string | null>(null);
 
   useEffect(() => {
     async function initialize() {
       const privateKey = await get("student_private_key");
-      const storedId = await get("student_id"); // Display Student ID
+      const storedId = await get("student_id"); 
 
       if (privateKey && storedId) {
-        setRegisteredId(storedId); // Set it to state
+        setRegisteredId(storedId); 
         setView("attendance");
         fetchRooms();
       } else {
         setView("register");
       }
     }
-
-      /* if (privateKey) {
-        setView("attendance");
-        fetchRooms();
-      } else {
-        setView("register");
-      }
-    }
-    */
 
     initialize();
   }, []);
@@ -146,7 +137,7 @@ export default function SmartStudentPortal() {
         await set("student_private_key", keyPair.privateKey);
         await set("student_id", studentId);
 
-        setRegisteredId(studentId); // Display Student ID
+        setRegisteredId(studentId); 
 
         setMessage("Device registered successfully!");
         setTimeout(() => {
@@ -169,6 +160,14 @@ export default function SmartStudentPortal() {
 
   async function handleLogAttendance(e: React.FormEvent) {
     e.preventDefault();
+    
+    // NEW: Check if the 4-digit PIN is entered
+    if (!roomPin || roomPin.length !== 4) {
+      setIsError(true);
+      setMessage("Please enter the 4-digit Room PIN displayed by your instructor.");
+      return;
+    }
+
     setIsLogging(true);
     setMessage("");
     setIsError(false);
@@ -197,15 +196,18 @@ export default function SmartStudentPortal() {
       const signatureArray = Array.from(new Uint8Array(rawSignature));
       const signatureBase64 = btoa(String.fromCharCode(...signatureArray));
 
+      // NEW: Send the roomPin in the payload
       const response = await submitAttendance({
         studentId: storedStudentId as string,
         labRoom: selectedRoom,
         timestamp: timestamp,
         signature: signatureBase64,
+        roomPin: roomPin, 
       });
 
       if (response.success) {
         setMessage(response.message);
+        setRoomPin(""); // Clear the PIN input on success
       } else {
         setIsError(true);
         setMessage(response.message);
@@ -274,34 +276,24 @@ export default function SmartStudentPortal() {
     );
   }
 
-  // =========================================================================
-  // FULLY RESPONSIVE UI
-  // =========================================================================
   return (
     <main className="min-h-screen w-full flex flex-col lg:flex-row bg-white font-sans">
       
-      {/* ================================================================ */}
-      {/* LEFT PANEL: BRANDING (Compact on Mobile, 40% on Desktop) */}
-      {/* ================================================================ */}
       <div className="relative w-full lg:w-[40%] min-h-[25vh] sm:min-h-[30vh] lg:min-h-screen bg-[#011B51] flex flex-col justify-center lg:justify-between p-6 sm:p-10 lg:p-14 overflow-hidden shadow-md lg:shadow-2xl z-10 border-b-4 lg:border-b-0 lg:border-r-4 border-[#FED702] shrink-0">
         
-        {/* BACKGROUND IMAGE WRAPPER */}
         <div className="absolute inset-0 z-0 bg-[#011B51]">
           <img 
             src="/lab-background.jpg" 
-            alt="University of the Assumption" 
+            alt="University of the Assumption Laboratory Background" 
             className="w-full h-full object-cover opacity-80"
           />
           <div className="absolute inset-0 bg-[#011B51]/60"></div>
         </div>
 
-        {/* Text Overlay */}
         <div className="relative z-10 flex flex-col h-full">
           <div className="flex flex-row lg:flex-col items-center lg:items-start space-x-4 lg:space-x-0">
-            {/* Logo shrinks on mobile, grows on desktop */}
-            <img src="/ua-logo.png" alt="UA Logo" className="w-12 h-12 sm:w-16 sm:h-16 lg:w-20 lg:h-20 object-contain lg:mb-8 drop-shadow-xl shrink-0" />
+            <img src="/ua-logo.png" alt="University of the Assumption Logo" className="w-12 h-12 sm:w-16 sm:h-16 lg:w-20 lg:h-20 object-contain lg:mb-8 drop-shadow-xl shrink-0" />
             
-            {/* Title scales down dynamically */}
             <h1 className="text-2xl sm:text-4xl lg:text-5xl xl:text-6xl font-black text-white tracking-tight leading-tight uppercase drop-shadow-2xl">
               Student <br className="hidden lg:block"/>
               <span className="text-[#FED702]">Lab Attendance</span><br className="hidden lg:block"/>
@@ -310,7 +302,6 @@ export default function SmartStudentPortal() {
             </h1>
           </div>
           
-          {/* Paragraph is completely hidden on mobile to save space, shows only on large screens */}
           <div className="hidden lg:block mt-auto pt-12">
             <p className="text-white/90 text-base lg:text-lg leading-relaxed font-medium drop-shadow-lg max-w-xl">
               Secure entry portal for registered students. Use this encrypted interface to register your device and log laboratory sessions effortlessly.
@@ -319,19 +310,14 @@ export default function SmartStudentPortal() {
         </div>
       </div>
 
-      {/* ================================================================ */}
-      {/* RIGHT PANEL: FORMS (Takes remaining space on mobile, 60% on Desktop) */}
-      {/* ================================================================ */}
       <div className="w-full lg:w-[60%] flex-1 flex items-center justify-center p-6 sm:p-10 lg:p-16 bg-white relative">
         
         <a href="/" className="absolute top-4 right-6 lg:top-8 lg:right-10 text-xs font-bold text-slate-400 hover:text-[#011B51] transition-colors uppercase tracking-wider">
           &larr; Main Portal
         </a>
 
-        {/* Form container */}
         <div className="w-full max-w-lg mt-6 lg:mt-0">
           
-          {/* VIEW: REGISTER */}
           {view === "register" && (
             <div className="animate-in fade-in duration-500">
               <div className="mb-8 lg:mb-10 text-center lg:text-left">
@@ -423,7 +409,6 @@ export default function SmartStudentPortal() {
             </div>
           )}
 
-          {/* VIEW: RECOVERY */}
           {view === "recovery" && (
             <div className="animate-in fade-in duration-500">
               <div className="mb-8 lg:mb-10 text-center lg:text-left">
@@ -474,12 +459,10 @@ export default function SmartStudentPortal() {
             </div>
           )}
 
-          {/* VIEW: ATTENDANCE LOGGING */}
           {view === "attendance" && (
             <div className="animate-in fade-in duration-500">
               <div className="mb-8 lg:mb-10 text-center lg:text-left">
 
-                {/* Display Student ID */}
                 <span className="inline-block px-3 py-1 mb-7 rounded-full bg-[#011B51]/10 text-[#011B51] text-[11px] font-black uppercase tracking-widest border border-[#011B51]/20">
                   Student ID: {registeredId}
                 </span>
@@ -491,7 +474,6 @@ export default function SmartStudentPortal() {
 
               <form onSubmit={handleLogAttendance} className="space-y-4 lg:space-y-6">
                 
-                {/* CLEAN & FORMAL SYSTEM TIME BADGE */}
                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center justify-center shadow-sm">
                   <div className="flex items-center space-x-3 text-left">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-[#011B51]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -518,6 +500,21 @@ export default function SmartStudentPortal() {
                     ))}
                   </select>
                 </div>
+
+                {/* NEW: Room PIN Input Field */}
+                <div>
+                  <label className="block text-[10px] sm:text-xs font-bold text-[#011B51] uppercase tracking-wide mb-1.5 lg:mb-2 ml-1">Room PIN</label>
+                  <input
+                    type="text"
+                    maxLength={4}
+                    className="w-full px-4 lg:px-5 py-3.5 lg:py-4 rounded-xl bg-slate-50 border border-slate-200 outline-none text-center text-lg sm:text-xl font-mono font-bold tracking-[0.3em] focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all shadow-sm"
+                    value={roomPin}
+                    onChange={(e) => setRoomPin(e.target.value.replace(/\D/g, ""))}
+                    placeholder="0000"
+                    required
+                  />
+                </div>
+
                 <button
                   type="submit"
                   disabled={isLogging || labRooms.length === 0}
@@ -529,7 +526,6 @@ export default function SmartStudentPortal() {
             </div>
           )}
 
-          {/* GLOBAL MESSAGE HANDLER */}
           {message && (
             <div className={`mt-6 lg:mt-8 p-4 lg:p-5 rounded-xl text-center text-xs sm:text-sm font-bold uppercase tracking-wide border-2 ${isError ? 'bg-rose-50 text-rose-700 border-rose-200' : message.includes("LATE") ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-emerald-50 text-emerald-700 border-emerald-200'}`}>
               {message}
