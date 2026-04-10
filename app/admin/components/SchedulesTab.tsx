@@ -1,29 +1,60 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { FaEdit, FaTrash, FaDoorOpen, FaUserTie } from "react-icons/fa";
+import { createSchedule, updateSchedule, deleteSchedule, assignTeacherToSchedule } from "../../actions";
 import { Schedule } from "../types";
-import { createSchedule, updateSchedule, deleteSchedule } from "../../actions";
 
 interface SchedulesTabProps {
   schedules: Schedule[];
-  refreshData?: () => void;
+  teachers: any[];
+  refreshData: () => void;
 }
 
-export default function SchedulesTab({
-  schedules,
-  refreshData,
-}: SchedulesTabProps) {
+const dayOrder: Record<string, number> = {
+  "Monday": 1,
+  "Tuesday": 2,
+  "Wednesday": 3,
+  "Thursday": 4,
+  "Friday": 5,
+  "Saturday": 6,
+  "Sunday": 7
+};
+
+function parseStartTime(timeStr: string) {
+  if (!timeStr) return 0;
+  const [start] = timeStr.split(/\s*-\s*/);
+  if (!start) return 0;
+  const match = start.trim().match(/(\d+):(\d+)\s*(AM|PM)/i);
+  if (!match) return 0;
+  
+  let hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  const modifier = match[3].toUpperCase();
+  
+  if (hours === 12) {
+    hours = modifier === "AM" ? 0 : 12;
+  } else if (modifier === "PM") {
+    hours += 12;
+  }
+  
+  return hours * 60 + minutes;
+}
+
+export default function SchedulesTab({ schedules = [], teachers = [], refreshData }: SchedulesTabProps) {
+  // Filtering & Pagination State
+  const [searchTerm, setSearchTerm] = useState("");
   const [dayFilter, setDayFilter] = useState("");
   const [roomFilter, setRoomFilter] = useState("");
+  const [sectionFilter, setSectionFilter] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 6;
+  const schedulesPerPage = 6;
 
-  // Modal and Form State
+  // Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [modalMode, setModalMode] = useState<"add" | "edit">("add");
+  const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
+  
   const [formData, setFormData] = useState({
     lab_room: "",
     date: "Monday",
@@ -32,46 +63,61 @@ export default function SchedulesTab({
     section: "",
   });
 
+  const [assignScheduleId, setAssignScheduleId] = useState<number | null>(null);
+  const [assignTeacherId, setAssignTeacherId] = useState<string>("");
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  const uniqueDays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const uniqueRooms = Array.from(new Set(schedules.map(s => s.lab_room))).sort();
+  const uniqueSections = Array.from(new Set(schedules.map(s => s.section))).sort();
+
+  // Reset to page 1 when any filter changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [dayFilter, roomFilter]);
+  }, [searchTerm, dayFilter, roomFilter, sectionFilter]);
 
-  const uniqueRooms = Array.from(new Set(schedules.map((s) => s.lab_room)));
-  const uniqueDays = [
-    "Monday",
-    "Tuesday",
-    "Wednesday",
-    "Thursday",
-    "Friday",
-    "Saturday",
-  ];
+  // Combine Filtering and Sorting
+  const filteredAndSortedSchedules = useMemo(() => {
+    let result = schedules.filter((sched: any) => {
+      const searchLower = searchTerm.toLowerCase();
+      const courseMatch = sched.course_code.toLowerCase().includes(searchLower);
+      const roomMatch = sched.lab_room.toLowerCase().includes(searchLower);
+      const teacherMatch = sched.teacher?.name?.toLowerCase().includes(searchLower);
+      
+      const matchesSearch = courseMatch || roomMatch || teacherMatch;
+      const matchesDay = dayFilter === "" || sched.date === dayFilter;
+      const matchesRoom = roomFilter === "" || sched.lab_room === roomFilter;
+      const matchesSection = sectionFilter === "" || sched.section === sectionFilter;
+      
+      return matchesSearch && matchesDay && matchesRoom && matchesSection;
+    });
 
-  const filteredSchedules = schedules.filter((sched) => {
-    const matchesRoom = roomFilter === "" || sched.lab_room === roomFilter;
-    const matchesDay = dayFilter === "" || sched.date === dayFilter;
-    return matchesRoom && matchesDay;
-  });
+    // Sort Chronologically: Day -> Time
+    result.sort((a, b) => {
+      const dayDiff = (dayOrder[a.date] || 99) - (dayOrder[b.date] || 99);
+      if (dayDiff !== 0) return dayDiff;
+      
+      return parseStartTime(a.schedule) - parseStartTime(b.schedule);
+    });
 
-  const totalPages = Math.max(
-    1,
-    Math.ceil(filteredSchedules.length / itemsPerPage),
+    return result;
+  }, [schedules, searchTerm, dayFilter, roomFilter, sectionFilter]);
+
+  // Pagination Calculation
+  const totalPages = Math.max(1, Math.ceil(filteredAndSortedSchedules.length / schedulesPerPage));
+  const paginatedSchedules = filteredAndSortedSchedules.slice(
+    (currentPage - 1) * schedulesPerPage, 
+    currentPage * schedulesPerPage
   );
-  const paginatedSchedules = filteredSchedules.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage,
-  );
 
-  // Form Handlers
-  function openAddModal() {
-    setModalMode("add");
+  function openCreateModal() {
     setEditingId(null);
     setFormData({
-      lab_room: "",
+      lab_room: uniqueRooms[0] || "P312 - Computer Lab 6",
       date: "Monday",
       schedule: "",
       course_code: "",
       section: "",
-      professor_name: "",
     });
     setIsModalOpen(true);
   }
@@ -88,296 +134,256 @@ export default function SchedulesTab({
     setIsModalOpen(true);
   }
 
-  async function handleDelete(id: number) {
-    if (confirm("Are you sure you want to delete this class schedule?")) {
-      setIsSubmitting(true);
-      const response = await deleteSchedule(id);
-      if (response.success) {
-        if (refreshData) refreshData();
-      } else {
-        alert(response.message);
-      }
-      setIsSubmitting(false);
-    }
+  function openAssignModal(sched: any) {
+    setAssignScheduleId(sched.id);
+    setAssignTeacherId(sched.teacher_id ? sched.teacher_id.toString() : "");
+    setIsAssignModalOpen(true);
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setIsSubmitting(true);
+    setIsProcessing(true);
 
-    let response;
-    if (modalMode === "add") {
-      response = await createSchedule(formData);
-    } else if (modalMode === "edit" && editingId !== null) {
-      response = await updateSchedule(editingId, formData);
-    }
-
-    if (response?.success) {
-      setIsModalOpen(false);
-      if (refreshData) refreshData();
+    if (editingId) {
+      await updateSchedule(editingId, formData);
     } else {
-      alert(response?.message || "An error occurred.");
+      await createSchedule(formData);
     }
 
-    setIsSubmitting(false);
+    setIsModalOpen(false);
+    setIsProcessing(false);
+    refreshData();
+  }
+
+  async function handleDelete(id: number) {
+    if (confirm("Are you sure you want to delete this schedule? This action cannot be undone.")) {
+      setIsProcessing(true);
+      await deleteSchedule(id);
+      setIsProcessing(false);
+      refreshData();
+    }
+  }
+
+  async function handleAssignTeacher(e: React.FormEvent) {
+    e.preventDefault();
+    if (!assignScheduleId || !assignTeacherId) return;
+
+    setIsProcessing(true);
+    await assignTeacherToSchedule(assignScheduleId, Number(assignTeacherId));
+    
+    setIsAssignModalOpen(false);
+    setIsProcessing(false);
+    refreshData();
   }
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      {/* Top Action Bar */}
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-wrap gap-4 items-center justify-between">
-        <div className="flex gap-4">
-          <select
-            className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-md text-sm outline-none cursor-pointer"
+      
+      {/* Advanced Control Bar */}
+      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col lg:flex-row gap-4 items-center justify-between">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full flex-1">
+          <input 
+            type="text" 
+            placeholder="Search course or instructor..." 
+            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:border-[#011B51] transition-colors"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+          <select 
+            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none cursor-pointer focus:border-[#011B51] transition-colors"
             value={dayFilter}
             onChange={(e) => setDayFilter(e.target.value)}
           >
             <option value="">All Days</option>
-            {uniqueDays.map((day) => (
-              <option key={day} value={day}>
-                {day}
-              </option>
-            ))}
+            {uniqueDays.map(day => <option key={day} value={day}>{day}</option>)}
           </select>
-          <select
-            className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-md text-sm outline-none cursor-pointer"
+          <select 
+            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none cursor-pointer focus:border-[#011B51] transition-colors"
             value={roomFilter}
             onChange={(e) => setRoomFilter(e.target.value)}
           >
-            <option value="">All Facilities</option>
-            {uniqueRooms.map((room) => (
-              <option key={room} value={room}>
-                {room}
-              </option>
-            ))}
+            <option value="">All Rooms</option>
+            {uniqueRooms.map(room => <option key={room as string} value={room as string}>{room}</option>)}
+          </select>
+          <select 
+            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none cursor-pointer focus:border-[#011B51] transition-colors"
+            value={sectionFilter}
+            onChange={(e) => setSectionFilter(e.target.value)}
+          >
+            <option value="">All Sections</option>
+            {uniqueSections.map(section => <option key={section as string} value={section as string}>{section}</option>)}
           </select>
         </div>
-        <button
-          onClick={openAddModal}
-          className="bg-slate-900 hover:bg-slate-800 text-white font-medium py-2 px-5 rounded-md text-sm transition-colors cursor-pointer"
-        >
-          Add New Schedule
-        </button>
+
+        <div className="flex items-center w-full lg:w-auto shrink-0 mt-4 lg:mt-0">
+          <button 
+            onClick={openCreateModal} 
+            className="w-full bg-[#011B51] hover:bg-[#022a7a] text-white font-bold py-2.5 px-6 rounded-lg text-xs uppercase tracking-wider transition-colors cursor-pointer border-b-2 border-[#A51A21] shadow-sm"
+          >
+            Add Schedule
+          </button>
+        </div>
       </div>
 
-      {/* Schedule Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {paginatedSchedules.map((sched) => (
-          <div
-            key={sched.id}
-            className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between"
-          >
-            <div>
-              <div className="flex justify-between items-start mb-4">
-                <span className="bg-slate-100 text-slate-700 text-xs font-bold px-2.5 py-1 rounded-md">
-                  {sched.date}
-                </span>
-                <span className="text-sm font-medium text-slate-500">
-                  {sched.schedule}
-                </span>
+      {/* Static Grid View (No Hover Actions) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        {paginatedSchedules.map((sched: any) => (
+          <div key={sched.id} className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col h-full">
+            <div className="flex justify-between items-start mb-4">
+              <span className="bg-[#011B51]/10 text-[#011B51] text-[10px] font-black px-3 py-1.5 rounded-lg uppercase tracking-widest">{sched.date}</span>
+              <span className="text-xs font-bold text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">{sched.schedule}</span>
+            </div>
+            
+            <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-1">{sched.course_code}</h3>
+            <p className="text-sm font-bold text-[#A51A21] mb-4">Section {sched.section}</p>
+            
+            <div className="space-y-2 mb-6 flex-1">
+              <div className="flex items-center text-xs font-medium text-slate-600 gap-3 bg-slate-50 p-2.5 rounded-lg">
+                <FaDoorOpen className="text-[#011B51] text-base shrink-0" />
+                <span className="truncate">{sched.lab_room}</span>
               </div>
-              <h3 className="text-lg font-bold text-slate-900">
-                {sched.course_code}
-              </h3>
-              <p className="text-sm text-slate-500 mb-5">
-                Section: {sched.section}
-              </p>
-              <div className="pt-4 border-t border-slate-100 flex flex-col space-y-2 text-sm mb-6">
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-500">Facility:</span>
-                  <span className="text-slate-900 font-medium">
-                    {sched.lab_room}
+              <div className={`flex items-center justify-between text-xs font-medium p-2.5 rounded-lg border ${sched.teacher ? 'bg-slate-50 border-transparent text-slate-600' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
+                <div className="flex items-center gap-3 truncate">
+                  <FaUserTie className={sched.teacher ? "text-[#011B51] text-base shrink-0" : "text-amber-600 text-base shrink-0"} />
+                  <span className={`truncate ${sched.teacher ? "font-bold text-slate-700" : "font-bold italic"}`}>
+                    {sched.teacher ? sched.teacher.name : "Unassigned"}
                   </span>
                 </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-slate-500">Instructor:</span>
-                  <span className="text-slate-900 font-medium">
-                    {sched.professor_name}
-                  </span>
-                </div>
+                <button onClick={() => openAssignModal(sched)} className="text-[10px] font-black uppercase tracking-widest text-[#011B51] hover:underline cursor-pointer ml-2 shrink-0">
+                  {sched.teacher ? "Change" : "Assign"}
+                </button>
               </div>
             </div>
-            <div className="flex gap-3 border-t border-slate-100 pt-4">
-              <button
-                onClick={() => openEditModal(sched)}
-                className="flex-1 bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 font-medium py-2 rounded-md text-xs transition-colors cursor-pointer"
-              >
-                Edit Details
+
+            <div className="pt-4 border-t border-slate-100 flex justify-end gap-2">
+              <button onClick={() => openEditModal(sched)} className="px-3 py-2 text-slate-500 hover:text-[#011B51] hover:bg-slate-100 rounded-lg transition-colors cursor-pointer flex items-center gap-2 text-xs font-bold uppercase tracking-widest border border-slate-200">
+                <FaEdit /> Edit
               </button>
-              <button
-                onClick={() => handleDelete(sched.id)}
-                disabled={isSubmitting}
-                className="flex-1 bg-white hover:bg-rose-50 text-rose-600 border border-rose-200 font-medium py-2 rounded-md text-xs transition-colors disabled:opacity-50 cursor-pointer"
-              >
-                Remove
+              <button onClick={() => handleDelete(sched.id)} disabled={isProcessing} className="px-3 py-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-2 text-xs font-bold uppercase tracking-widest border border-slate-200">
+                <FaTrash /> Delete
               </button>
             </div>
           </div>
         ))}
-        {paginatedSchedules.length === 0 && (
-          <div className="col-span-full p-8 text-center text-slate-500 bg-white rounded-xl border border-slate-200">
-            No schedules match your filters.
+        {filteredAndSortedSchedules.length === 0 && (
+          <div className="col-span-full p-12 text-center text-xs font-bold text-slate-400 uppercase tracking-widest bg-white rounded-xl border border-slate-200 border-dashed">
+            No schedules found matching your filters.
           </div>
         )}
       </div>
 
-      {filteredSchedules.length > 0 && (
-        <div className="flex justify-between px-6 py-4 bg-transparent">
-          <button
-            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-            disabled={currentPage === 1}
-            className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-md disabled:opacity-50 cursor-pointer"
+      {/* Pagination Controls */}
+      {filteredAndSortedSchedules.length > 0 && (
+        <div className="flex justify-between px-2 py-4 bg-transparent items-center mt-2">
+          <button 
+            onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
+            disabled={currentPage === 1} 
+            className="px-5 py-2.5 text-[10px] font-bold text-[#011B51] uppercase tracking-widest bg-white border-2 border-slate-200 rounded-lg disabled:opacity-50 cursor-pointer shadow-sm hover:border-[#011B51]/30 transition-colors"
           >
             Previous
           </button>
-          <span className="text-sm text-slate-700 self-center">
-            Page <span className="font-semibold">{currentPage}</span> of{" "}
-            {totalPages}
+          <span className="text-xs font-black text-[#011B51] uppercase tracking-widest">
+            Page {currentPage} of {totalPages}
           </span>
-          <button
-            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-            disabled={currentPage === totalPages}
-            className="px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-md disabled:opacity-50 cursor-pointer"
+          <button 
+            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} 
+            disabled={currentPage === totalPages} 
+            className="px-5 py-2.5 text-[10px] font-bold text-[#011B51] uppercase tracking-widest bg-white border-2 border-slate-200 rounded-lg disabled:opacity-50 cursor-pointer shadow-sm hover:border-[#011B51]/30 transition-colors"
           >
             Next
           </button>
         </div>
       )}
 
-      {/* Data Entry Modal */}
+      {/* Create/Edit Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-              <h3 className="text-lg font-bold text-slate-900">
-                {modalMode === "add"
-                  ? "Create New Schedule"
-                  : "Edit Class Details"}
+        <div className="fixed inset-0 bg-[#011B51]/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 border-t-8 border-[#FED702]">
+            <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <h3 className="text-xl font-black text-[#011B51] uppercase tracking-tight">
+                {editingId ? "Edit Schedule" : "Add Schedule"}
               </h3>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-slate-700 font-bold text-xl cursor-pointer"
-              >
-                &times;
-              </button>
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-[#011B51] font-black text-2xl cursor-pointer">&times;</button>
             </div>
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+            
+            <div className="p-6">
+              <form onSubmit={handleSubmit} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
-                    Course Code
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. IT 301"
-                    required
-                    value={formData.course_code}
-                    onChange={(e) =>
-                      setFormData({ ...formData, course_code: e.target.value })
-                    }
-                    className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm outline-none focus:border-slate-800"
-                  />
+                  <label className="block text-[10px] font-bold text-[#011B51] uppercase tracking-widest mb-1.5 ml-1">Laboratory Room</label>
+                  <input type="text" required className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 outline-none text-sm font-medium focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all" value={formData.lab_room} onChange={(e) => setFormData({ ...formData, lab_room: e.target.value })} placeholder="e.g. C301 - CISCO LAB1" />
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
-                    Section
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. IT 3A"
-                    required
-                    value={formData.section}
-                    onChange={(e) =>
-                      setFormData({ ...formData, section: e.target.value })
-                    }
-                    className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm outline-none focus:border-slate-800"
-                  />
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#011B51] uppercase tracking-widest mb-1.5 ml-1">Day of Week</label>
+                    <select className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 outline-none text-sm font-medium focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all cursor-pointer" value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })}>
+                      {uniqueDays.map(day => <option key={day} value={day}>{day}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#011B51] uppercase tracking-widest mb-1.5 ml-1">Time Schedule</label>
+                    <input type="text" required className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 outline-none text-sm font-medium focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all" value={formData.schedule} onChange={(e) => setFormData({ ...formData, schedule: e.target.value })} placeholder="e.g. 9:30AM - 11:30AM" />
+                  </div>
                 </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#011B51] uppercase tracking-widest mb-1.5 ml-1">Course Code</label>
+                    <input type="text" required className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 outline-none text-sm font-medium focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all uppercase" value={formData.course_code} onChange={(e) => setFormData({ ...formData, course_code: e.target.value })} placeholder="e.g. C-PCEITEL2" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold text-[#011B51] uppercase tracking-widest mb-1.5 ml-1">Section</label>
+                    <input type="text" required className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 outline-none text-sm font-medium focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all uppercase" value={formData.section} onChange={(e) => setFormData({ ...formData, section: e.target.value })} placeholder="e.g. IT 3A" />
+                  </div>
+                </div>
+
+                <div className="pt-4 mt-2">
+                  <button type="submit" disabled={isProcessing} className="w-full bg-[#011B51] hover:bg-[#022a7a] text-white font-bold py-3.5 rounded-xl transition-all shadow-md border-b-4 border-[#A51A21] disabled:opacity-70 text-xs uppercase tracking-wider cursor-pointer">
+                    {isProcessing ? "Saving..." : editingId ? "Save Changes" : "Create Schedule"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Assign Instructor Modal */}
+      {isAssignModalOpen && (
+        <div className="fixed inset-0 bg-[#011B51]/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 border-t-8 border-[#A51A21]">
+            <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <div>
+                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Staff Management</h3>
+                <h2 className="text-xl font-black text-[#011B51] uppercase tracking-tight">Assign Instructor</h2>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <button onClick={() => setIsAssignModalOpen(false)} className="text-slate-400 hover:text-[#011B51] font-black text-2xl cursor-pointer">&times;</button>
+            </div>
+            
+            <div className="p-6">
+              <form onSubmit={handleAssignTeacher} className="space-y-6">
                 <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
-                    Day of Week
-                  </label>
-                  <select
-                    required
-                    value={formData.date}
-                    onChange={(e) =>
-                      setFormData({ ...formData, date: e.target.value })
-                    }
-                    className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm outline-none focus:border-slate-800 cursor-pointer"
+                  <label className="block text-[10px] font-bold text-[#011B51] uppercase tracking-widest mb-2 ml-1">Select Active Instructor</label>
+                  <select 
+                    required 
+                    className="w-full px-4 py-3.5 rounded-xl bg-slate-50 border border-slate-200 outline-none text-sm font-medium focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all cursor-pointer appearance-none" 
+                    value={assignTeacherId} 
+                    onChange={(e) => setAssignTeacherId(e.target.value)}
                   >
-                    {uniqueDays.map((day) => (
-                      <option key={day} value={day}>
-                        {day}
+                    <option value="" disabled>Choose from active roster...</option>
+                    {teachers.map(teacher => (
+                      <option key={teacher.id} value={teacher.id}>
+                        {teacher.name} (ID: {teacher.user_id})
                       </option>
                     ))}
                   </select>
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
-                    Time Range
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="07:30 AM - 10:30 AM"
-                    required
-                    value={formData.schedule}
-                    onChange={(e) =>
-                      setFormData({ ...formData, schedule: e.target.value })
-                    }
-                    className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm outline-none focus:border-slate-800"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
-                  Facility / Room
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. P311 - COMPUTER LAB 5"
-                  required
-                  value={formData.lab_room}
-                  onChange={(e) =>
-                    setFormData({ ...formData, lab_room: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm outline-none focus:border-slate-800"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
-                  Instructor Name
-                </label>
-                <input
-                  type="text"
-                  placeholder="Full Name"
-                  required
-                  value={formData.professor_name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, professor_name: e.target.value })
-                  }
-                  className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm outline-none focus:border-slate-800"
-                />
-              </div>
 
-              <div className="pt-4 mt-6 border-t border-slate-100 flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-md transition-colors cursor-pointer"
-                >
-                  Cancel
+                <button type="submit" disabled={isProcessing || !assignTeacherId} className="w-full bg-[#A51A21] hover:bg-[#851319] text-white font-bold py-3.5 rounded-xl transition-all shadow-md border-b-4 border-[#011B51] disabled:opacity-70 text-xs uppercase tracking-wider cursor-pointer">
+                  {isProcessing ? "Processing..." : "Confirm Assignment"}
                 </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-6 py-2 text-sm font-medium text-white bg-slate-900 hover:bg-slate-800 rounded-md transition-colors disabled:opacity-50 cursor-pointer"
-                >
-                  {isSubmitting ? "Saving..." : "Save Schedule"}
-                </button>
-              </div>
-            </form>
+              </form>
+            </div>
           </div>
         </div>
       )}

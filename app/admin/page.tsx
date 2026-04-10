@@ -73,7 +73,7 @@ export default function AdminDashboard() {
         fetchDashboardData();
       } else {
         setMessageType("error");
-        setMessage(response.message);
+        setMessage(response.message || "Authentication failed.");
       }
     } catch (error) {
       console.error(error);
