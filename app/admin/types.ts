@@ -26,6 +26,7 @@ export interface AttendanceLog {
   id: number;
   timestamp: Date | string;
   status: string;
+  signature?: string | null; 
   student: Student;
   schedule: Schedule;
 }
