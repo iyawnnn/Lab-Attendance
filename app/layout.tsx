@@ -1,9 +1,14 @@
 import type { Metadata } from "next";
-import { Outfit } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
-// Configure Outfit with the standard Latin character set
-const outfit = Outfit({ subsets: ["latin"] });
+const satoshi = localFont({
+  src: "./fonts/Satoshi-Variable.ttf",
+  variable: "--font-satoshi",
+  weight: "300 900",
+  style: "normal",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Laboratory Attendance System",
@@ -17,8 +22,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      {/* Inject the Outfit font class into the body */}
-      <body className={`${outfit.className} bg-gray-50 text-gray-900 min-h-screen`}>
+      <body className={`${satoshi.variable} font-sans bg-gray-50 text-gray-900 min-h-screen`}>
         {children}
       </body>
     </html>

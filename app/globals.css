@@ -1,1 +1,5 @@
 @import "tailwindcss";
+
+@theme {
+  --font-sans: var(--font-satoshi), ui-sans-serif, system-ui, sans-serif;
+}
