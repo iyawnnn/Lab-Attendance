@@ -25,7 +25,6 @@ export default function TeacherDashboard() {
 
   const [activeTab, setActiveTab] = useState<"session" | "schedules" | "attendance">("session");
 
-  // Settings Modal State
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [currentPassword, setCurrentPassword] = useState<string>("");
   const [newPassword, setNewPassword] = useState<string>("");
@@ -273,11 +272,10 @@ export default function TeacherDashboard() {
           <SchedulesTab schedules={schedules} />
         </div>
         <div className={activeTab === "attendance" ? "block" : "hidden"}>
-          <AttendanceTab logs={logs} />
+          <AttendanceTab logs={logs} schedules={schedules} teacherUserId={activeTeacherId} />
         </div>
       </div>
 
-      {/* SECURITY SETTINGS MODAL */}
       {isSettingsOpen && (
         <div className="fixed inset-0 bg-[#011B51]/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 sm:p-8">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200 border-t-8 border-[#FED702]">

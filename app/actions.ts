@@ -124,7 +124,7 @@ export async function submitAttendance(data: {
     const serverTime = Date.now();
     const allowedDrift = parseInt(
       process.env.ALLOWED_TIME_DRIFT_MS || "60000",
-      10
+      10,
     );
 
     if (Math.abs(serverTime - clientTime) > allowedDrift) {
@@ -136,18 +136,18 @@ export async function submitAttendance(data: {
 
     const encoder = new TextEncoder();
     const encodedMessage = encoder.encode(
-      `${data.studentId}-${data.labRoom}-${data.timestamp}`
+      `${data.studentId}-${data.labRoom}-${data.timestamp}`,
     );
-    
+
     const binarySignature = new Uint8Array(
       atob(data.signature)
         .split("")
-        .map((c) => c.charCodeAt(0))
+        .map((c) => c.charCodeAt(0)),
     );
     const binaryPublicKey = new Uint8Array(
       atob(student.public_key)
         .split("")
-        .map((c) => c.charCodeAt(0))
+        .map((c) => c.charCodeAt(0)),
     );
 
     const importedPublicKey = await globalThis.crypto.subtle.importKey(
@@ -155,14 +155,14 @@ export async function submitAttendance(data: {
       binaryPublicKey,
       { name: "ECDSA", namedCurve: "P-256" },
       true,
-      ["verify"]
+      ["verify"],
     );
 
     const isValid = await globalThis.crypto.subtle.verify(
       { name: "ECDSA", hash: { name: "SHA-256" } },
       importedPublicKey,
       binarySignature,
-      encodedMessage
+      encodedMessage,
     );
 
     if (!isValid) {
@@ -183,7 +183,8 @@ export async function submitAttendance(data: {
     if (!matchedSchedule) {
       return {
         success: false,
-        message: "Verification Failed: Invalid, expired, or incorrect Room PIN.",
+        message:
+          "Verification Failed: Invalid, expired, or incorrect Room PIN.",
       };
     }
 
@@ -211,9 +212,9 @@ export async function submitAttendance(data: {
 
       const lateThreshold = parseInt(
         process.env.LATE_THRESHOLD_MINUTES || "15",
-        10
+        10,
       );
-      
+
       if (currentMinutesSinceMidnight > classStartMins + lateThreshold) {
         attendanceStatus = "LATE";
       }
@@ -644,4 +645,78 @@ function parseScheduleTime(timeStr: string) {
 
 export async function getServerTime() {
   return { success: true, timestamp: new Date().toISOString() };
+}
+
+export async function manuallyAdmitStudent(data: {
+  studentId: string;
+  scheduleId: number;
+  teacherUserId: string;
+  status: string;
+}) {
+  try {
+    const teacher = await prisma.user.findUnique({
+      where: { user_id: data.teacherUserId },
+    });
+
+    if (!teacher) {
+      return { success: false, message: "Instructor authorization failed." };
+    }
+
+    const schedule = await prisma.schedule.findUnique({
+      where: { id: data.scheduleId },
+    });
+
+    if (!schedule || schedule.teacher_id !== teacher.id) {
+      return {
+        success: false,
+        message: "Unauthorized. You do not manage this schedule.",
+      };
+    }
+
+    const student = await prisma.student.findUnique({
+      where: { student_id: data.studentId },
+    });
+
+    if (!student) {
+      return {
+        success: false,
+        message: "Student ID does not exist in the system.",
+      };
+    }
+
+    const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000);
+    const existingLog = await prisma.attendanceLog.findFirst({
+      where: {
+        student_id: data.studentId,
+        schedule_id: data.scheduleId,
+        timestamp: { gte: twelveHoursAgo },
+      },
+    });
+
+    if (existingLog) {
+      return {
+        success: false,
+        message: "Student is already recorded as present for this session.",
+      };
+    }
+
+    await prisma.attendanceLog.create({
+      data: {
+        student_id: data.studentId,
+        schedule_id: data.scheduleId,
+        status: data.status,
+        signature: `OVERRIDE_AUTHORIZED_BY_${data.teacherUserId}`,
+      },
+    });
+
+    return {
+      success: true,
+      message: `Student ${data.studentId} has been manually admitted.`,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message: "Database error during manual override.",
+    };
+  }
 }
