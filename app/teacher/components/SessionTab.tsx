@@ -202,7 +202,8 @@ export default function SessionTab({ schedules, teacherId }: SessionTabProps) {
               ))}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[400px] overflow-y-auto pr-2 pb-2">
+            {/* Added custom-scrollbar class here */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[400px] overflow-y-auto pr-2 pb-2 custom-scrollbar">
               {filteredSchedules.length > 0 ? (
                 filteredSchedules.map((sched) => (
                   <div

@@ -4,15 +4,15 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { FileX, UserPlus, Search, ChevronDown, Check, X } from "lucide-react";
 import { manuallyAdmitStudent } from "../../actions";
 
-// --- CUSTOM UI COMPONENT: Searchable Dropdown ---
-// This solves the 40+ schedules UI/UX problem without external libraries
-function SearchableDropdown({ 
+// --- CUSTOM UI COMPONENT: Filter Dropdown ---
+function FilterDropdown({ 
   options, 
   value, 
   onChange, 
   placeholder, 
   allowClear = false,
-  clearText = "Clear selection"
+  clearText = "Clear selection",
+  showSearch = true
 }: { 
   options: { id: string; label: string }[]; 
   value: string; 
@@ -20,6 +20,7 @@ function SearchableDropdown({
   placeholder: string;
   allowClear?: boolean;
   clearText?: string;
+  showSearch?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -36,10 +37,11 @@ function SearchableDropdown({
   }, []);
 
   const filteredOptions = useMemo(() => {
+    if (!showSearch) return options;
     return options.filter(opt => 
       opt.label.toLowerCase().includes(query.toLowerCase())
     );
-  }, [options, query]);
+  }, [options, query, showSearch]);
 
   const selectedOption = options.find(opt => opt.id === value);
 
@@ -49,7 +51,7 @@ function SearchableDropdown({
         onClick={() => setIsOpen(!isOpen)}
         className={`w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100 border transition-all rounded-lg text-sm cursor-pointer flex justify-between items-center shadow-sm ${isOpen ? 'border-[#011B51] ring-2 ring-[#011B51]/10' : 'border-slate-200'}`}
       >
-        <span className={`truncate mr-2 ${selectedOption ? "text-slate-900 font-bold" : "text-slate-500 font-medium"}`}>
+        <span className={`truncate mr-2 ${selectedOption ? "text-[#011B51] font-bold" : "text-slate-500 font-medium"}`}>
           {selectedOption ? selectedOption.label : placeholder}
         </span>
         <ChevronDown size={16} className={`text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
@@ -57,19 +59,21 @@ function SearchableDropdown({
 
       {isOpen && (
         <div className="absolute z-50 w-full mt-1.5 bg-white border border-slate-200 rounded-lg shadow-xl flex flex-col overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-          <div className="p-2.5 border-b border-slate-100 flex items-center gap-2 bg-slate-50/80">
-            <Search size={14} className="text-slate-400 shrink-0" />
-            <input
-              type="text"
-              autoFocus
-              placeholder="Type to search..."
-              className="w-full bg-transparent outline-none text-sm text-slate-700 font-medium placeholder:text-slate-400"
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-            />
-          </div>
+          {showSearch && (
+            <div className="p-2.5 border-b border-slate-100 flex items-center gap-2 bg-slate-50/80">
+              <Search size={14} className="text-slate-400 shrink-0" />
+              <input
+                type="text"
+                autoFocus
+                placeholder="Search..."
+                className="w-full bg-transparent outline-none text-sm text-slate-700 font-medium placeholder:text-slate-400"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+              />
+            </div>
+          )}
           <div className="overflow-y-auto max-h-[240px] flex-1 p-1.5 custom-scrollbar">
-            {allowClear && (
+            {allowClear && value && (
                <div
                  onClick={() => {
                    onChange("");
@@ -135,13 +139,18 @@ export default function AttendanceTab({ logs = [], schedules = [], teacherUserId
 
   const logsPerPage = 10;
 
-  // Format schedules for our custom dropdown
+  // Format options for our custom dropdowns
   const scheduleOptions = useMemo(() => {
     return schedules.map(sched => ({
       id: sched.id.toString(),
       label: `${sched.course_code} - Sec ${sched.section} (${sched.lab_room})`
     }));
   }, [schedules]);
+
+  const statusOptions = [
+    { id: "ON_TIME", label: "On Time" },
+    { id: "LATE", label: "Late" }
+  ];
 
   useEffect(() => {
     setCurrentPage(1);
@@ -268,7 +277,7 @@ export default function AttendanceTab({ logs = [], schedules = [], teacherUserId
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-4">
+      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-4 relative z-10">
         
         <div className="flex flex-col xl:flex-row gap-4 items-center justify-between w-full">
           {/* Filters Area */}
@@ -282,7 +291,7 @@ export default function AttendanceTab({ logs = [], schedules = [], teacherUserId
             />
 
             <div className="w-full sm:w-auto sm:min-w-[240px]">
-              <SearchableDropdown
+              <FilterDropdown
                 options={scheduleOptions}
                 value={classFilter}
                 onChange={setClassFilter}
@@ -299,18 +308,20 @@ export default function AttendanceTab({ logs = [], schedules = [], teacherUserId
               onChange={(e) => setDateFilter(e.target.value)}
             />
 
-            <select
-              className="w-full sm:w-auto sm:max-w-[150px] truncate px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none cursor-pointer focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/10 transition-all appearance-none shadow-sm"
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-            >
-              <option value="">All Statuses</option>
-              <option value="ON_TIME">On Time</option>
-              <option value="LATE">Late</option>
-            </select>
+            <div className="w-full sm:w-auto sm:min-w-[150px]">
+              <FilterDropdown
+                options={statusOptions}
+                value={statusFilter}
+                onChange={setStatusFilter}
+                placeholder="All Statuses"
+                allowClear={true}
+                clearText="Show All Statuses"
+                showSearch={false}
+              />
+            </div>
           </div>
 
-          <div className="flex gap-2 w-full xl:w-auto shrink-0">
+          <div className="flex gap-2 w-full xl:w-auto shrink-0 mt-4 xl:mt-0">
             <button
               onClick={() => setShowManualEntry(!showManualEntry)}
               className={`flex-1 xl:flex-none py-2.5 px-4 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer shadow-sm flex items-center justify-center gap-2 ${
@@ -336,7 +347,7 @@ export default function AttendanceTab({ logs = [], schedules = [], teacherUserId
           <form onSubmit={handleManualSubmit} className="mt-2 p-5 bg-blue-50/50 border border-blue-100 rounded-xl flex flex-col md:flex-row gap-4 items-end animate-in slide-in-from-top-2">
             <div className="w-full md:w-[25%]">
               <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 ml-1">
-                Student ID Number
+                Student ID
               </label>
               <input
                 type="text"
@@ -350,10 +361,9 @@ export default function AttendanceTab({ logs = [], schedules = [], teacherUserId
             
             <div className="w-full md:w-[40%]">
               <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 ml-1">
-                Select Class Session
+                Class Session
               </label>
-              {/* Uses the new custom searchable dropdown here too */}
-              <SearchableDropdown
+              <FilterDropdown
                 options={scheduleOptions}
                 value={manualScheduleId}
                 onChange={setManualScheduleId}
@@ -365,15 +375,13 @@ export default function AttendanceTab({ logs = [], schedules = [], teacherUserId
               <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 ml-1">
                 Attendance Status
               </label>
-              <select
-                required
-                className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm font-bold outline-none focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/10 transition-all cursor-pointer shadow-sm"
+              <FilterDropdown
+                options={statusOptions}
                 value={manualStatus}
-                onChange={(e) => setManualStatus(e.target.value)}
-              >
-                <option value="ON_TIME" className="text-emerald-700">On Time</option>
-                <option value="LATE" className="text-amber-700">Late</option>
-              </select>
+                onChange={setManualStatus}
+                placeholder="Status"
+                showSearch={false}
+              />
             </div>
 
             <button
@@ -388,27 +396,24 @@ export default function AttendanceTab({ logs = [], schedules = [], teacherUserId
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col relative z-0">
-        <div className="custom-scrollbar overflow-auto max-h-[600px] rounded-t-xl">
-          <table className="w-full text-left text-sm text-slate-600 whitespace-nowrap">
-            <thead className="bg-slate-50 border-b border-slate-200 text-[#011B51] uppercase text-[10px] font-black tracking-widest sticky top-0 z-10 shadow-sm">
-              <tr>
-                <th className="px-6 py-4">Student</th>
-                <th className="px-6 py-4">Class Details</th>
-                <th className="px-6 py-4">Status</th>
-                <th className="px-6 py-4">Timestamp</th>
+        <div className="custom-scrollbar overflow-x-auto overflow-y-auto max-h-[600px] rounded-t-xl">
+          <table className="w-full text-left border-collapse whitespace-nowrap">
+            <thead className="sticky top-0 z-10">
+              <tr className="bg-slate-50 text-slate-600 text-xs uppercase tracking-wider shadow-sm border-b border-slate-200">
+                <th className="p-4 font-semibold">Student</th>
+                <th className="p-4 font-semibold">Class Details</th>
+                <th className="p-4 font-semibold">Status</th>
+                <th className="p-4 font-semibold">Timestamp</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100">
+            <tbody className="divide-y divide-slate-100 text-slate-700 text-sm">
               {paginatedLogs.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-6 py-20 bg-white">
-                    <div className="flex flex-col items-center justify-center text-center">
+                  <td colSpan={4} className="p-16 text-center">
+                    <div className="flex flex-col items-center justify-center">
                       <FileX className="w-12 h-12 text-slate-300 mb-4" />
-                      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                        No attendance records found
-                      </p>
-                      <p className="text-xs text-slate-400 mt-1">
-                        Try adjusting your filters or search terms.
+                      <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">
+                        No records found matching filters
                       </p>
                     </div>
                   </td>
@@ -475,7 +480,7 @@ export default function AttendanceTab({ logs = [], schedules = [], teacherUserId
         </div>
 
         {filteredLogs.length > 0 && (
-          <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between rounded-b-xl z-10">
+          <div className="flex justify-between items-center px-6 py-4 border-t border-slate-200 bg-slate-50 rounded-b-xl z-10">
             <button
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
               disabled={currentPage === 1}
