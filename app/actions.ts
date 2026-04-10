@@ -105,11 +105,13 @@ export async function submitAttendance(data: {
     const student = await prisma.student.findUnique({
       where: { student_id: data.studentId },
     });
+
     if (!student)
       return {
         success: false,
         message: "Student not found in the database. Please register.",
       };
+
     if (!student.public_key || student.public_key === "")
       return {
         success: false,
@@ -168,33 +170,31 @@ export async function submitAttendance(data: {
       };
 
     let attendanceStatus = "ON_TIME";
-    try {
-      const phTimeFormatter = new Intl.DateTimeFormat("en-US", {
-        timeZone: "Asia/Manila",
-        hour: "numeric",
-        minute: "numeric",
-        hour12: false,
-      });
-      const timeParts = phTimeFormatter.formatToParts(new Date());
-      let currentHour = 0;
-      let currentMinute = 0;
-      for (const part of timeParts) {
-        if (part.type === "hour") currentHour = parseInt(part.value);
-        if (part.type === "minute") currentMinute = parseInt(part.value);
+    const currentMinutesSinceMidnight = getCurrentPHTimeInMinutes();
+    const [startStr, endStr] = matchedSchedule.schedule.split(/\s*-\s*/);
+
+    if (startStr && endStr) {
+      const classStartMins = parseScheduleTime(startStr);
+      const classEndMins = parseScheduleTime(endStr);
+
+      if (currentMinutesSinceMidnight > classEndMins) {
+        return {
+          success: false,
+          message: "Submission failed. This class session has already ended.",
+        };
       }
 
-      const currentMinutesSinceMidnight = currentHour * 60 + currentMinute;
-      const [startStr] = matchedSchedule.schedule.split(/\s*-\s*/);
-      if (startStr) {
-        const [time, modifier] = startStr.trim().split(" ");
-        let [hours, minutes] = time.split(":").map(Number);
-        if (modifier === "PM" && hours < 12) hours += 12;
-        if (modifier === "AM" && hours === 12) hours = 0;
-        const classStartMins = hours * 60 + (minutes || 0);
-        if (currentMinutesSinceMidnight > classStartMins + 15)
-          attendanceStatus = "LATE";
+      if (currentMinutesSinceMidnight < classStartMins - 30) {
+        return {
+          success: false,
+          message: "Submission failed. This class session has not started yet.",
+        };
       }
-    } catch (e) {}
+
+      if (currentMinutesSinceMidnight > classStartMins + 15) {
+        attendanceStatus = "LATE";
+      }
+    }
 
     const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000);
     const existingLog = await prisma.attendanceLog.findFirst({
@@ -410,12 +410,43 @@ export async function generateSessionPin(
   teacherUserId: string,
 ) {
   try {
+    const schedule = await prisma.schedule.findUnique({
+      where: { id: scheduleId },
+    });
+
+    if (!schedule) {
+      return { success: false, message: "Schedule not found." };
+    }
+
+    const currentMinutes = getCurrentPHTimeInMinutes();
+    const [startStr, endStr] = schedule.schedule.split(/\s*-\s*/);
+
+    if (startStr && endStr) {
+      const startMins = parseScheduleTime(startStr);
+      const endMins = parseScheduleTime(endStr);
+
+      if (currentMinutes < startMins - 30) {
+        return {
+          success: false,
+          message: "Cannot start session. Class has not started yet.",
+        };
+      }
+      if (currentMinutes > endMins) {
+        return {
+          success: false,
+          message: "Cannot start session. Class has already ended.",
+        };
+      }
+    }
+
     const pin = Math.floor(1000 + Math.random() * 9000).toString();
     const expiresAt = new Date(Date.now() + 60 * 1000);
+
     await prisma.schedule.update({
       where: { id: scheduleId },
       data: { active_pin: pin, pin_expires_at: expiresAt },
     });
+
     return { success: true, pin, expiresAt: expiresAt.toISOString() };
   } catch (error) {
     return {
@@ -547,4 +578,40 @@ export async function changeTeacherPassword(
   } catch (error) {
     return { success: false, message: "Server error during password update." };
   }
+}
+
+function getCurrentPHTimeInMinutes() {
+  const phTimeFormatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Manila",
+    hour: "numeric",
+    minute: "numeric",
+    hour12: false,
+  });
+  const timeParts = phTimeFormatter.formatToParts(new Date());
+  let currentHour = 0;
+  let currentMinute = 0;
+
+  for (const part of timeParts) {
+    if (part.type === "hour") currentHour = parseInt(part.value);
+    if (part.type === "minute") currentMinute = parseInt(part.value);
+  }
+  return currentHour * 60 + currentMinute;
+}
+
+function parseScheduleTime(timeStr: string) {
+  if (!timeStr) return 0;
+  
+  // Regex safely extracts hours, minutes, and AM/PM (handling optional spaces)
+  const match = timeStr.trim().match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+  if (!match) return 0;
+
+  let hours = parseInt(match[1], 10);
+  const minutes = parseInt(match[2], 10);
+  const modifier = match[3].toUpperCase();
+
+  // Convert to 24-hour military time for accurate comparison
+  if (modifier === "PM" && hours < 12) hours += 12;
+  if (modifier === "AM" && hours === 12) hours = 0;
+
+  return hours * 60 + minutes;
 }
