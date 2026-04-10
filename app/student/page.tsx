@@ -9,6 +9,7 @@ import {
   recoverStudentDevice,
   checkRevokedStatus,
 } from "../actions";
+import GeofenceGuard from "./components/GeofenceGuard";
 
 export default function SmartStudentPortal() {
   const [view, setView] = useState<"loading" | "register" | "attendance" | "recovery">("loading");
@@ -22,7 +23,6 @@ export default function SmartStudentPortal() {
   const [labRooms, setLabRooms] = useState<string[]>([]);
   const [selectedRoom, setSelectedRoom] = useState("");
   
-  // NEW: State for the 60-second Room PIN
   const [roomPin, setRoomPin] = useState("");
   
   const [isLogging, setIsLogging] = useState(false);
@@ -161,7 +161,6 @@ export default function SmartStudentPortal() {
   async function handleLogAttendance(e: React.FormEvent) {
     e.preventDefault();
     
-    // NEW: Check if the 4-digit PIN is entered
     if (!roomPin || roomPin.length !== 4) {
       setIsError(true);
       setMessage("Please enter the 4-digit Room PIN displayed by your instructor.");
@@ -196,7 +195,6 @@ export default function SmartStudentPortal() {
       const signatureArray = Array.from(new Uint8Array(rawSignature));
       const signatureBase64 = btoa(String.fromCharCode(...signatureArray));
 
-      // NEW: Send the roomPin in the payload
       const response = await submitAttendance({
         studentId: storedStudentId as string,
         labRoom: selectedRoom,
@@ -207,7 +205,7 @@ export default function SmartStudentPortal() {
 
       if (response.success) {
         setMessage(response.message);
-        setRoomPin(""); // Clear the PIN input on success
+        setRoomPin(""); 
       } else {
         setIsError(true);
         setMessage(response.message);
@@ -472,57 +470,58 @@ export default function SmartStudentPortal() {
                 <p className="text-slate-500 text-xs sm:text-sm font-semibold uppercase tracking-wide">Select your current facility.</p>
               </div>
 
-              <form onSubmit={handleLogAttendance} className="space-y-4 lg:space-y-6">
-                
-                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center justify-center shadow-sm">
-                  <div className="flex items-center space-x-3 text-left">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-[#011B51]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <div>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Philippine Standard Time</p>
-                      <p className="text-sm font-bold text-[#011B51]">{philippineTime || "Syncing clock..."}</p>
+              <GeofenceGuard>
+                <form onSubmit={handleLogAttendance} className="space-y-4 lg:space-y-6">
+                  
+                  <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center justify-center shadow-sm">
+                    <div className="flex items-center space-x-3 text-left">
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-[#011B51]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Philippine Standard Time</p>
+                        <p className="text-sm font-bold text-[#011B51]">{philippineTime || "Syncing clock..."}</p>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                <div>
-                  <label className="block text-[10px] sm:text-xs font-bold text-[#011B51] uppercase tracking-wide mb-1.5 lg:mb-2 ml-1">Facility Selection</label>
-                  <select
-                    className="w-full px-4 lg:px-5 py-4 lg:py-5 rounded-xl bg-slate-50 border border-slate-200 outline-none cursor-pointer text-sm sm:text-base font-medium focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all shadow-sm appearance-none"
-                    value={selectedRoom}
-                    onChange={(e) => setSelectedRoom(e.target.value)}
-                    required
+                  <div>
+                    <label className="block text-[10px] sm:text-xs font-bold text-[#011B51] uppercase tracking-wide mb-1.5 lg:mb-2 ml-1">Facility Selection</label>
+                    <select
+                      className="w-full px-4 lg:px-5 py-4 lg:py-5 rounded-xl bg-slate-50 border border-slate-200 outline-none cursor-pointer text-sm sm:text-base font-medium focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all shadow-sm appearance-none"
+                      value={selectedRoom}
+                      onChange={(e) => setSelectedRoom(e.target.value)}
+                      required
+                    >
+                      <option value="" disabled>Select your laboratory room...</option>
+                      {labRooms.map((room, index) => (
+                        <option key={index} value={room}>{room}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] sm:text-xs font-bold text-[#011B51] uppercase tracking-wide mb-1.5 lg:mb-2 ml-1">Room PIN</label>
+                    <input
+                      type="text"
+                      maxLength={4}
+                      className="w-full px-4 lg:px-5 py-3.5 lg:py-4 rounded-xl bg-slate-50 border border-slate-200 outline-none text-center text-lg sm:text-xl font-mono font-bold tracking-[0.3em] focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all shadow-sm"
+                      value={roomPin}
+                      onChange={(e) => setRoomPin(e.target.value.replace(/\D/g, ""))}
+                      placeholder="0000"
+                      required
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isLogging || labRooms.length === 0}
+                    className="w-full bg-[#011B51] hover:bg-[#022a7a] text-white font-bold py-3.5 lg:py-4 rounded-xl mt-6 lg:mt-8 transition-all shadow-md hover:shadow-lg lg:hover:-translate-y-0.5 border-b-4 border-[#A51A21] disabled:opacity-70 disabled:border-[#011B51] disabled:transform-none text-xs sm:text-sm uppercase tracking-wider cursor-pointer"
                   >
-                    <option value="" disabled>Select your laboratory room...</option>
-                    {labRooms.map((room, index) => (
-                      <option key={index} value={room}>{room}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* NEW: Room PIN Input Field */}
-                <div>
-                  <label className="block text-[10px] sm:text-xs font-bold text-[#011B51] uppercase tracking-wide mb-1.5 lg:mb-2 ml-1">Room PIN</label>
-                  <input
-                    type="text"
-                    maxLength={4}
-                    className="w-full px-4 lg:px-5 py-3.5 lg:py-4 rounded-xl bg-slate-50 border border-slate-200 outline-none text-center text-lg sm:text-xl font-mono font-bold tracking-[0.3em] focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all shadow-sm"
-                    value={roomPin}
-                    onChange={(e) => setRoomPin(e.target.value.replace(/\D/g, ""))}
-                    placeholder="0000"
-                    required
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isLogging || labRooms.length === 0}
-                  className="w-full bg-[#011B51] hover:bg-[#022a7a] text-white font-bold py-3.5 lg:py-4 rounded-xl mt-6 lg:mt-8 transition-all shadow-md hover:shadow-lg lg:hover:-translate-y-0.5 border-b-4 border-[#A51A21] disabled:opacity-70 disabled:border-[#011B51] disabled:transform-none text-xs sm:text-sm uppercase tracking-wider cursor-pointer"
-                >
-                  {isLogging ? "Verifying Keys..." : "Securely Log Attendance"}
-                </button>
-              </form>
+                    {isLogging ? "Verifying Keys..." : "Securely Log Attendance"}
+                  </button>
+                </form>
+              </GeofenceGuard>
             </div>
           )}
 
