@@ -106,31 +106,48 @@ export async function submitAttendance(data: {
       where: { student_id: data.studentId },
     });
 
-    if (!student)
+    if (!student) {
       return {
         success: false,
         message: "Student not found in the database. Please register.",
       };
+    }
 
-    if (!student.public_key || student.public_key === "")
+    if (!student.public_key || student.public_key === "") {
       return {
         success: false,
         message: "DEVICE_REVOKED: Your device access has been revoked.",
       };
+    }
+
+    const clientTime = new Date(data.timestamp).getTime();
+    const serverTime = Date.now();
+    const allowedDrift = parseInt(
+      process.env.ALLOWED_TIME_DRIFT_MS || "60000",
+      10
+    );
+
+    if (Math.abs(serverTime - clientTime) > allowedDrift) {
+      return {
+        success: false,
+        message: "Request rejected: Timestamp desynchronization detected.",
+      };
+    }
 
     const encoder = new TextEncoder();
     const encodedMessage = encoder.encode(
-      `${data.studentId}-${data.labRoom}-${data.timestamp}`,
+      `${data.studentId}-${data.labRoom}-${data.timestamp}`
     );
+    
     const binarySignature = new Uint8Array(
       atob(data.signature)
         .split("")
-        .map((c) => c.charCodeAt(0)),
+        .map((c) => c.charCodeAt(0))
     );
     const binaryPublicKey = new Uint8Array(
       atob(student.public_key)
         .split("")
-        .map((c) => c.charCodeAt(0)),
+        .map((c) => c.charCodeAt(0))
     );
 
     const importedPublicKey = await globalThis.crypto.subtle.importKey(
@@ -138,21 +155,22 @@ export async function submitAttendance(data: {
       binaryPublicKey,
       { name: "ECDSA", namedCurve: "P-256" },
       true,
-      ["verify"],
+      ["verify"]
     );
 
     const isValid = await globalThis.crypto.subtle.verify(
       { name: "ECDSA", hash: { name: "SHA-256" } },
       importedPublicKey,
       binarySignature,
-      encodedMessage,
+      encodedMessage
     );
 
-    if (!isValid)
+    if (!isValid) {
       return {
         success: false,
         message: "Digital signature verification failed.",
       };
+    }
 
     const matchedSchedule = await prisma.schedule.findFirst({
       where: {
@@ -162,12 +180,12 @@ export async function submitAttendance(data: {
       },
     });
 
-    if (!matchedSchedule)
+    if (!matchedSchedule) {
       return {
         success: false,
-        message:
-          "Verification Failed: Invalid, expired, or incorrect Room PIN.",
+        message: "Verification Failed: Invalid, expired, or incorrect Room PIN.",
       };
+    }
 
     let attendanceStatus = "ON_TIME";
     const currentMinutesSinceMidnight = getCurrentPHTimeInMinutes();
@@ -191,7 +209,12 @@ export async function submitAttendance(data: {
         };
       }
 
-      if (currentMinutesSinceMidnight > classStartMins + 15) {
+      const lateThreshold = parseInt(
+        process.env.LATE_THRESHOLD_MINUTES || "15",
+        10
+      );
+      
+      if (currentMinutesSinceMidnight > classStartMins + lateThreshold) {
         attendanceStatus = "LATE";
       }
     }
@@ -205,11 +228,12 @@ export async function submitAttendance(data: {
       },
     });
 
-    if (existingLog)
+    if (existingLog) {
       return {
         success: false,
         message: "Attendance already recorded for this session today.",
       };
+    }
 
     await prisma.attendanceLog.create({
       data: {
@@ -441,16 +465,16 @@ export async function generateSessionPin(
 
     const pin = Math.floor(1000 + Math.random() * 9000).toString();
     // UI gets 60 seconds, Database gets 70 seconds to account for network lag
-    const uiExpiresAt = new Date(Date.now() + 60 * 1000); 
-    const dbExpiresAt = new Date(Date.now() + 70 * 1000); 
-    
+    const uiExpiresAt = new Date(Date.now() + 60 * 1000);
+    const dbExpiresAt = new Date(Date.now() + 70 * 1000);
+
     await prisma.schedule.update({
       where: { id: scheduleId },
       data: { active_pin: pin, pin_expires_at: dbExpiresAt }, // Save DB expiry
     });
-    
+
     // Return UI expiry to the frontend
-    return { success: true, pin, expiresAt: uiExpiresAt.toISOString() }; 
+    return { success: true, pin, expiresAt: uiExpiresAt.toISOString() };
   } catch (error) {
     return {
       success: false,
@@ -584,8 +608,9 @@ export async function changeTeacherPassword(
 }
 
 function getCurrentPHTimeInMinutes() {
+  const timeZone = process.env.NEXT_PUBLIC_APP_TIMEZONE || "Asia/Manila";
   const phTimeFormatter = new Intl.DateTimeFormat("en-US", {
-    timeZone: "Asia/Manila",
+    timeZone: timeZone,
     hour: "numeric",
     minute: "numeric",
     hour12: false,
@@ -615,4 +640,8 @@ function parseScheduleTime(timeStr: string) {
   if (modifier === "AM" && hours === 12) hours = 0;
 
   return hours * 60 + minutes;
+}
+
+export async function getServerTime() {
+  return { success: true, timestamp: new Date().toISOString() };
 }
