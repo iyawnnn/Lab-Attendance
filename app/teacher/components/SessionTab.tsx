@@ -27,9 +27,11 @@ export default function SessionTab({ schedules, teacherId }: SessionTabProps) {
   const [selectedDay, setSelectedDay] = useState<string>("");
 
   useEffect(() => {
-    const currentDay = new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date());
+    const currentDay = new Intl.DateTimeFormat("en-US", {
+      weekday: "long",
+    }).format(new Date());
     const availableDays = Array.from(new Set(schedules.map((s) => s.date)));
-    
+
     if (availableDays.includes(currentDay)) {
       setSelectedDay(currentDay);
     } else if (availableDays.length > 0) {
@@ -38,10 +40,9 @@ export default function SessionTab({ schedules, teacherId }: SessionTabProps) {
   }, [schedules]);
 
   useEffect(() => {
-    // Restore active session from local storage on component mount
-    const storedPin = localStorage.getItem("activeSessionPin");
-    const storedExpiry = localStorage.getItem("activeSessionExpiry");
-    const storedScheduleId = localStorage.getItem("activeScheduleId");
+    const storedPin = localStorage.getItem(`activeSessionPin_${teacherId}`);
+    const storedExpiry = localStorage.getItem(`activeSessionExpiry_${teacherId}`);
+    const storedScheduleId = localStorage.getItem(`activeScheduleId_${teacherId}`);
 
     if (storedPin && storedExpiry && storedScheduleId) {
       const expiryTime = parseInt(storedExpiry, 10);
@@ -50,14 +51,16 @@ export default function SessionTab({ schedules, teacherId }: SessionTabProps) {
       if (expiryTime > now) {
         setActivePin(storedPin);
         setSelectedScheduleId(
-          !isNaN(Number(storedScheduleId)) ? Number(storedScheduleId) : storedScheduleId
+          !isNaN(Number(storedScheduleId))
+            ? Number(storedScheduleId)
+            : storedScheduleId,
         );
         setTimeLeft(Math.floor((expiryTime - now) / 1000));
       } else {
         clearActiveSession();
       }
     }
-  }, []);
+  }, [teacherId]);
 
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -71,13 +74,21 @@ export default function SessionTab({ schedules, teacherId }: SessionTabProps) {
   }, [activePin, timeLeft]);
 
   function clearActiveSession() {
-    localStorage.removeItem("activeSessionPin");
-    localStorage.removeItem("activeSessionExpiry");
-    localStorage.removeItem("activeScheduleId");
+    localStorage.removeItem(`activeSessionPin_${teacherId}`);
+    localStorage.removeItem(`activeSessionExpiry_${teacherId}`);
+    localStorage.removeItem(`activeScheduleId_${teacherId}`);
   }
 
   const uniqueDays = useMemo(() => {
-    const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+    const days = [
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+      "Sunday",
+    ];
     const scheduleDays = Array.from(new Set(schedules.map((s) => s.date)));
     return days.filter((day) => scheduleDays.includes(day));
   }, [schedules]);
@@ -98,19 +109,27 @@ export default function SessionTab({ schedules, teacherId }: SessionTabProps) {
 
     setIsGenerating(true);
     setError("");
-    
-    const result = await generateSessionPin(Number(selectedScheduleId), teacherId);
+
+    const result = await generateSessionPin(
+      Number(selectedScheduleId),
+      teacherId,
+    );
 
     if (result.success && result.pin && result.expiresAt) {
       setActivePin(result.pin);
-      const expiryDate = new Date(result.expiresAt).getTime();
-      const secondsRemaining = Math.floor((expiryDate - Date.now()) / 1000);
-      setTimeLeft(secondsRemaining);
 
-      // Persist session parameters to prevent state loss on reload
-      localStorage.setItem("activeSessionPin", result.pin);
-      localStorage.setItem("activeSessionExpiry", expiryDate.toString());
-      localStorage.setItem("activeScheduleId", selectedScheduleId.toString());
+      const displayExpiryDate = Date.now() + 60 * 1000;
+      setTimeLeft(60);
+
+      localStorage.setItem(`activeSessionPin_${teacherId}`, result.pin);
+      localStorage.setItem(
+        `activeSessionExpiry_${teacherId}`,
+        displayExpiryDate.toString(),
+      );
+      localStorage.setItem(
+        `activeScheduleId_${teacherId}`,
+        selectedScheduleId.toString(),
+      );
     } else {
       setError(result.message || "Failed to initialize session.");
     }
@@ -120,13 +139,16 @@ export default function SessionTab({ schedules, teacherId }: SessionTabProps) {
   return (
     <div className="animate-in fade-in duration-500 max-w-4xl mx-auto">
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 sm:p-10">
-        
         {!activePin ? (
           <div className="space-y-8">
             <div className="text-center sm:text-left">
-              <h2 className="text-2xl sm:text-3xl font-black text-[#011B51] uppercase tracking-tight">Initialize Session</h2>
+              <h2 className="text-2xl sm:text-3xl font-black text-[#011B51] uppercase tracking-tight">
+                Initialize Session
+              </h2>
               <div className="w-16 h-1.5 bg-[#FED702] mt-3 mb-2 rounded-full mx-auto sm:mx-0"></div>
-              <p className="text-slate-500 text-sm font-medium">Select your current class to generate a 60-second secure entry PIN.</p>
+              <p className="text-slate-500 text-sm font-medium">
+                Select your current class to generate a 60-second secure entry PIN.
+              </p>
             </div>
 
             <div className="flex flex-wrap gap-2 mb-4">
@@ -135,7 +157,7 @@ export default function SessionTab({ schedules, teacherId }: SessionTabProps) {
                   key={day}
                   onClick={() => {
                     setSelectedDay(day);
-                    setSelectedScheduleId(""); 
+                    setSelectedScheduleId("");
                   }}
                   className={`px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wide transition-all ${
                     selectedDay === day
@@ -168,14 +190,49 @@ export default function SessionTab({ schedules, teacherId }: SessionTabProps) {
                         Sec {sched.section}
                       </span>
                     </div>
-                    
+
                     <div className="space-y-1 mt-3">
                       <div className="flex items-center text-sm text-slate-600 font-medium">
-                        <svg className="w-4 h-4 mr-2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        <svg
+                          className="w-4 h-4 mr-2 text-slate-400"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                          ></path>
+                        </svg>
                         {sched.schedule}
                       </div>
-                      <div className="flex items-center text-sm text-slate-600 font-medium truncate" title={sched.lab_room}>
-                        <svg className="w-4 h-4 mr-2 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.243-4.243a8 8 0 1111.314 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                      <div
+                        className="flex items-center text-sm text-slate-600 font-medium truncate"
+                        title={sched.lab_room}
+                      >
+                        <svg
+                          className="w-4 h-4 mr-2 text-slate-400 shrink-0"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                          xmlns="http://www.w3.org/2000/svg"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.243-4.243a8 8 0 1111.314 0z"
+                          ></path>
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                          ></path>
+                        </svg>
                         <span className="truncate">{sched.lab_room}</span>
                       </div>
                     </div>
@@ -200,26 +257,63 @@ export default function SessionTab({ schedules, teacherId }: SessionTabProps) {
                 disabled={isGenerating || !selectedScheduleId}
                 className="w-full text-white font-bold py-4 rounded-xl transition-all bg-[#011B51] hover:bg-[#022a7a] border-b-4 border-[#A51A21] disabled:opacity-70 text-sm uppercase tracking-widest cursor-pointer shadow-md"
               >
-                {isGenerating ? "Generating Verification Pin..." : "Start 60-Second Verification"}
+                {isGenerating
+                  ? "Generating Verification Pin..."
+                  : "Start 60-Second Verification"}
               </button>
             </div>
           </div>
         ) : (
           <div className="flex flex-col items-center justify-center min-h-[60vh] text-center animate-in zoom-in-95 duration-300">
-            
             {activeSchedule && (
               <div className="mb-10 space-y-3">
-                <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest">Active Class Session</h2>
+                <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                  Active Class Session
+                </h2>
                 <div className="text-3xl font-black text-[#011B51]">
-                  {activeSchedule.course_code} <span className="text-slate-300 mx-2">|</span> Sec {activeSchedule.section}
+                  {activeSchedule.course_code}{" "}
+                  <span className="text-slate-300 mx-2">|</span> Sec{" "}
+                  {activeSchedule.section}
                 </div>
                 <div className="flex items-center justify-center space-x-6 text-slate-500 font-medium text-base">
                   <span className="flex items-center">
-                    <svg className="w-5 h-5 mr-2 text-[#FED702]" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <svg
+                      className="w-5 h-5 mr-2 text-[#FED702]"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                      ></path>
+                    </svg>
                     {activeSchedule.schedule}
                   </span>
                   <span className="flex items-center">
-                    <svg className="w-5 h-5 mr-2 text-[#FED702]" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.243-4.243a8 8 0 1111.314 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                    <svg
+                      className="w-5 h-5 mr-2 text-[#FED702]"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.243-4.243a8 8 0 1111.314 0z"
+                      ></path>
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                      ></path>
+                    </svg>
                     {activeSchedule.lab_room}
                   </span>
                 </div>
@@ -229,12 +323,18 @@ export default function SessionTab({ schedules, teacherId }: SessionTabProps) {
             <div className="text-[120px] sm:text-[160px] leading-none font-mono font-black text-[#011B51] tracking-[0.15em] mb-12 drop-shadow-sm">
               {activePin}
             </div>
-            
-            <div className={`px-10 py-5 rounded-full border-2 transition-colors ${timeLeft <= 10 ? 'bg-rose-50 border-rose-200 text-rose-600' : 'bg-slate-50 border-slate-200 text-slate-700'}`}>
+
+            <div
+              className={`px-10 py-5 rounded-full border-2 transition-colors ${timeLeft <= 10 ? "bg-rose-50 border-rose-200 text-rose-600" : "bg-slate-50 border-slate-200 text-slate-700"}`}
+            >
               <span className="text-4xl font-black uppercase tracking-widest flex items-center space-x-4">
                 <span className="relative flex h-5 w-5">
-                  <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${timeLeft <= 10 ? 'bg-rose-500' : 'bg-[#FED702]'}`}></span>
-                  <span className={`relative inline-flex rounded-full h-5 w-5 ${timeLeft <= 10 ? 'bg-rose-600' : 'bg-[#FED702]'}`}></span>
+                  <span
+                    className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${timeLeft <= 10 ? "bg-rose-500" : "bg-[#FED702]"}`}
+                  ></span>
+                  <span
+                    className={`relative inline-flex rounded-full h-5 w-5 ${timeLeft <= 10 ? "bg-rose-600" : "bg-[#FED702]"}`}
+                  ></span>
                 </span>
                 <span>{timeLeft}s Remaining</span>
               </span>

@@ -58,4 +58,6 @@ model AttendanceLog {
 
   student     Student  @relation(fields: [student_id], references: [student_id])
   schedule    Schedule @relation(fields: [schedule_id], references: [id])
+
+  @@unique([student_id, schedule_id]) 
 }

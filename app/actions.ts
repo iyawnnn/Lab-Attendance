@@ -440,14 +440,17 @@ export async function generateSessionPin(
     }
 
     const pin = Math.floor(1000 + Math.random() * 9000).toString();
-    const expiresAt = new Date(Date.now() + 60 * 1000);
-
+    // UI gets 60 seconds, Database gets 70 seconds to account for network lag
+    const uiExpiresAt = new Date(Date.now() + 60 * 1000); 
+    const dbExpiresAt = new Date(Date.now() + 70 * 1000); 
+    
     await prisma.schedule.update({
       where: { id: scheduleId },
-      data: { active_pin: pin, pin_expires_at: expiresAt },
+      data: { active_pin: pin, pin_expires_at: dbExpiresAt }, // Save DB expiry
     });
-
-    return { success: true, pin, expiresAt: expiresAt.toISOString() };
+    
+    // Return UI expiry to the frontend
+    return { success: true, pin, expiresAt: uiExpiresAt.toISOString() }; 
   } catch (error) {
     return {
       success: false,
@@ -600,8 +603,7 @@ function getCurrentPHTimeInMinutes() {
 
 function parseScheduleTime(timeStr: string) {
   if (!timeStr) return 0;
-  
-  // Regex safely extracts hours, minutes, and AM/PM (handling optional spaces)
+
   const match = timeStr.trim().match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
   if (!match) return 0;
 
@@ -609,7 +611,6 @@ function parseScheduleTime(timeStr: string) {
   const minutes = parseInt(match[2], 10);
   const modifier = match[3].toUpperCase();
 
-  // Convert to 24-hour military time for accurate comparison
   if (modifier === "PM" && hours < 12) hours += 12;
   if (modifier === "AM" && hours === 12) hours = 0;
 
