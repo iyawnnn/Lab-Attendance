@@ -1,10 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { generateSessionPin } from "../../actions";
 
+interface Schedule {
+  id: number | string;
+  course_code: string;
+  section: string;
+  lab_room: string;
+  schedule: string;
+  date: string;
+}
+
 interface SessionTabProps {
-  schedules: any[];
+  schedules: Schedule[];
   teacherId: string;
 }
 
@@ -15,15 +24,71 @@ export default function SessionTab({ schedules, teacherId }: SessionTabProps) {
   const [error, setError] = useState<string>("");
   const [isGenerating, setIsGenerating] = useState(false);
 
+  const [selectedDay, setSelectedDay] = useState<string>("");
+
+  useEffect(() => {
+    const currentDay = new Intl.DateTimeFormat("en-US", { weekday: "long" }).format(new Date());
+    const availableDays = Array.from(new Set(schedules.map((s) => s.date)));
+    
+    if (availableDays.includes(currentDay)) {
+      setSelectedDay(currentDay);
+    } else if (availableDays.length > 0) {
+      setSelectedDay(availableDays[0]);
+    }
+  }, [schedules]);
+
+  useEffect(() => {
+    // Restore active session from local storage on component mount
+    const storedPin = localStorage.getItem("activeSessionPin");
+    const storedExpiry = localStorage.getItem("activeSessionExpiry");
+    const storedScheduleId = localStorage.getItem("activeScheduleId");
+
+    if (storedPin && storedExpiry && storedScheduleId) {
+      const expiryTime = parseInt(storedExpiry, 10);
+      const now = Date.now();
+
+      if (expiryTime > now) {
+        setActivePin(storedPin);
+        setSelectedScheduleId(
+          !isNaN(Number(storedScheduleId)) ? Number(storedScheduleId) : storedScheduleId
+        );
+        setTimeLeft(Math.floor((expiryTime - now) / 1000));
+      } else {
+        clearActiveSession();
+      }
+    }
+  }, []);
+
   useEffect(() => {
     let timer: NodeJS.Timeout;
     if (activePin && timeLeft > 0) {
       timer = setInterval(() => setTimeLeft((prev) => prev - 1), 1000);
-    } else if (timeLeft <= 0) {
+    } else if (timeLeft <= 0 && activePin) {
       setActivePin(null);
+      clearActiveSession();
     }
     return () => clearInterval(timer);
   }, [activePin, timeLeft]);
+
+  function clearActiveSession() {
+    localStorage.removeItem("activeSessionPin");
+    localStorage.removeItem("activeSessionExpiry");
+    localStorage.removeItem("activeScheduleId");
+  }
+
+  const uniqueDays = useMemo(() => {
+    const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+    const scheduleDays = Array.from(new Set(schedules.map((s) => s.date)));
+    return days.filter((day) => scheduleDays.includes(day));
+  }, [schedules]);
+
+  const filteredSchedules = useMemo(() => {
+    return schedules.filter((sched) => sched.date === selectedDay);
+  }, [schedules, selectedDay]);
+
+  const activeSchedule = useMemo(() => {
+    return schedules.find((sched) => sched.id === selectedScheduleId) || null;
+  }, [schedules, selectedScheduleId]);
 
   async function handleGeneratePin() {
     if (!selectedScheduleId) {
@@ -41,6 +106,11 @@ export default function SessionTab({ schedules, teacherId }: SessionTabProps) {
       const expiryDate = new Date(result.expiresAt).getTime();
       const secondsRemaining = Math.floor((expiryDate - Date.now()) / 1000);
       setTimeLeft(secondsRemaining);
+
+      // Persist session parameters to prevent state loss on reload
+      localStorage.setItem("activeSessionPin", result.pin);
+      localStorage.setItem("activeSessionExpiry", expiryDate.toString());
+      localStorage.setItem("activeScheduleId", selectedScheduleId.toString());
     } else {
       setError(result.message || "Failed to initialize session.");
     }
@@ -48,31 +118,74 @@ export default function SessionTab({ schedules, teacherId }: SessionTabProps) {
   }
 
   return (
-    <div className="animate-in fade-in duration-500 max-w-2xl mx-auto">
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 sm:p-12">
+    <div className="animate-in fade-in duration-500 max-w-4xl mx-auto">
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 sm:p-10">
         
         {!activePin ? (
           <div className="space-y-8">
-            <div className="text-center">
-              <h2 className="text-2xl font-black text-[#011B51] uppercase tracking-tight">Initialize Class Session</h2>
-              <div className="w-16 h-1.5 bg-[#FED702] mt-4 mx-auto rounded-full"></div>
-              <p className="text-slate-500 text-sm font-medium mt-4">Select your current class to generate a 60-second secure entry PIN for your students.</p>
+            <div className="text-center sm:text-left">
+              <h2 className="text-2xl sm:text-3xl font-black text-[#011B51] uppercase tracking-tight">Initialize Session</h2>
+              <div className="w-16 h-1.5 bg-[#FED702] mt-3 mb-2 rounded-full mx-auto sm:mx-0"></div>
+              <p className="text-slate-500 text-sm font-medium">Select your current class to generate a 60-second secure entry PIN.</p>
             </div>
 
-            <div>
-              <label className="block text-[10px] sm:text-xs font-bold text-[#011B51] uppercase tracking-wide mb-2 ml-1">Target Schedule</label>
-              <select
-                className="w-full px-5 py-4 rounded-xl bg-slate-50 border border-slate-200 outline-none text-sm font-medium focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all appearance-none cursor-pointer"
-                value={selectedScheduleId}
-                onChange={(e) => setSelectedScheduleId(e.target.value)}
-              >
-                <option value="" disabled>Select a scheduled class...</option>
-                {schedules.map((sched) => (
-                  <option key={sched.id} value={sched.id}>
-                    {sched.course_code} - Sec {sched.section} ({sched.lab_room}) | {sched.schedule}
-                  </option>
-                ))}
-              </select>
+            <div className="flex flex-wrap gap-2 mb-4">
+              {uniqueDays.map((day) => (
+                <button
+                  key={day}
+                  onClick={() => {
+                    setSelectedDay(day);
+                    setSelectedScheduleId(""); 
+                  }}
+                  className={`px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wide transition-all ${
+                    selectedDay === day
+                      ? "bg-[#011B51] text-white shadow-md"
+                      : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                  }`}
+                >
+                  {day}
+                </button>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[400px] overflow-y-auto pr-2 pb-2">
+              {filteredSchedules.length > 0 ? (
+                filteredSchedules.map((sched) => (
+                  <div
+                    key={sched.id}
+                    onClick={() => setSelectedScheduleId(sched.id)}
+                    className={`cursor-pointer border-2 rounded-xl p-4 transition-all ${
+                      selectedScheduleId === sched.id
+                        ? "border-[#011B51] bg-[#011B51]/5 shadow-sm"
+                        : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <h3 className="font-black text-[#011B51] text-lg leading-none">
+                        {sched.course_code}
+                      </h3>
+                      <span className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-1 rounded uppercase tracking-widest">
+                        Sec {sched.section}
+                      </span>
+                    </div>
+                    
+                    <div className="space-y-1 mt-3">
+                      <div className="flex items-center text-sm text-slate-600 font-medium">
+                        <svg className="w-4 h-4 mr-2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        {sched.schedule}
+                      </div>
+                      <div className="flex items-center text-sm text-slate-600 font-medium truncate" title={sched.lab_room}>
+                        <svg className="w-4 h-4 mr-2 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.243-4.243a8 8 0 1111.314 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                        <span className="truncate">{sched.lab_room}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="col-span-full py-8 text-center text-slate-400 font-medium text-sm">
+                  No classes scheduled for {selectedDay}.
+                </div>
+              )}
             </div>
 
             {error && (
@@ -81,27 +194,47 @@ export default function SessionTab({ schedules, teacherId }: SessionTabProps) {
               </div>
             )}
 
-            <button
-              onClick={handleGeneratePin}
-              disabled={isGenerating || schedules.length === 0}
-              className="w-full text-white font-bold py-5 rounded-xl transition-all bg-[#011B51] hover:bg-[#022a7a] border-b-4 border-[#A51A21] disabled:opacity-70 text-sm uppercase tracking-widest cursor-pointer shadow-md"
-            >
-              {isGenerating ? "Generating..." : "Start 60-Second Verification"}
-            </button>
+            <div className="pt-4 border-t border-slate-100">
+              <button
+                onClick={handleGeneratePin}
+                disabled={isGenerating || !selectedScheduleId}
+                className="w-full text-white font-bold py-4 rounded-xl transition-all bg-[#011B51] hover:bg-[#022a7a] border-b-4 border-[#A51A21] disabled:opacity-70 text-sm uppercase tracking-widest cursor-pointer shadow-md"
+              >
+                {isGenerating ? "Generating Verification Pin..." : "Start 60-Second Verification"}
+              </button>
+            </div>
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center py-10 text-center animate-in zoom-in-95 duration-300">
-            <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-6">Display on Projector</h2>
+          <div className="flex flex-col items-center justify-center min-h-[60vh] text-center animate-in zoom-in-95 duration-300">
             
-            <div className="text-[120px] leading-none font-mono font-black text-[#011B51] tracking-[0.15em] mb-10 drop-shadow-sm">
+            {activeSchedule && (
+              <div className="mb-10 space-y-3">
+                <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest">Active Class Session</h2>
+                <div className="text-3xl font-black text-[#011B51]">
+                  {activeSchedule.course_code} <span className="text-slate-300 mx-2">|</span> Sec {activeSchedule.section}
+                </div>
+                <div className="flex items-center justify-center space-x-6 text-slate-500 font-medium text-base">
+                  <span className="flex items-center">
+                    <svg className="w-5 h-5 mr-2 text-[#FED702]" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    {activeSchedule.schedule}
+                  </span>
+                  <span className="flex items-center">
+                    <svg className="w-5 h-5 mr-2 text-[#FED702]" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.243-4.243a8 8 0 1111.314 0z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                    {activeSchedule.lab_room}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            <div className="text-[120px] sm:text-[160px] leading-none font-mono font-black text-[#011B51] tracking-[0.15em] mb-12 drop-shadow-sm">
               {activePin}
             </div>
             
-            <div className={`px-8 py-4 rounded-full border-2 transition-colors ${timeLeft <= 10 ? 'bg-rose-50 border-rose-200 text-rose-600' : 'bg-slate-50 border-slate-200 text-slate-700'}`}>
-              <span className="text-3xl font-black uppercase tracking-widest flex items-center space-x-3">
-                <span className="relative flex h-4 w-4">
+            <div className={`px-10 py-5 rounded-full border-2 transition-colors ${timeLeft <= 10 ? 'bg-rose-50 border-rose-200 text-rose-600' : 'bg-slate-50 border-slate-200 text-slate-700'}`}>
+              <span className="text-4xl font-black uppercase tracking-widest flex items-center space-x-4">
+                <span className="relative flex h-5 w-5">
                   <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${timeLeft <= 10 ? 'bg-rose-500' : 'bg-[#FED702]'}`}></span>
-                  <span className={`relative inline-flex rounded-full h-4 w-4 ${timeLeft <= 10 ? 'bg-rose-600' : 'bg-[#FED702]'}`}></span>
+                  <span className={`relative inline-flex rounded-full h-5 w-5 ${timeLeft <= 10 ? 'bg-rose-600' : 'bg-[#FED702]'}`}></span>
                 </span>
                 <span>{timeLeft}s Remaining</span>
               </span>
