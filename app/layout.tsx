@@ -6,7 +6,6 @@ const satoshi = localFont({
   src: "./fonts/Satoshi-Variable.ttf",
   variable: "--font-satoshi",
   weight: "300 900",
-  style: "normal",
   display: "swap",
 });
 
@@ -21,8 +20,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`${satoshi.variable} font-sans bg-gray-50 text-gray-900 min-h-screen`}>
+    <html lang="en" className={satoshi.variable}>
+      <body className="font-sans bg-gray-50 text-gray-900 min-h-screen antialiased">
         {children}
       </body>
     </html>

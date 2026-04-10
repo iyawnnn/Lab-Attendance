@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import { Maximize, Minimize } from "lucide-react";
 import { generateSessionPin } from "../../actions";
 
 interface Schedule {
@@ -25,6 +26,9 @@ export default function SessionTab({ schedules, teacherId }: SessionTabProps) {
   const [isGenerating, setIsGenerating] = useState(false);
 
   const [selectedDay, setSelectedDay] = useState<string>("");
+  
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const fullscreenRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const currentDay = new Intl.DateTimeFormat("en-US", {
@@ -69,9 +73,21 @@ export default function SessionTab({ schedules, teacherId }: SessionTabProps) {
     } else if (timeLeft <= 0 && activePin) {
       setActivePin(null);
       clearActiveSession();
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(console.error);
+      }
     }
     return () => clearInterval(timer);
   }, [activePin, timeLeft]);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
 
   function clearActiveSession() {
     localStorage.removeItem(`activeSessionPin_${teacherId}`);
@@ -135,6 +151,22 @@ export default function SessionTab({ schedules, teacherId }: SessionTabProps) {
     }
     setIsGenerating(false);
   }
+
+  const toggleFullscreen = async () => {
+    try {
+      if (!document.fullscreenElement) {
+        if (fullscreenRef.current) {
+          await fullscreenRef.current.requestFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+        }
+      }
+    } catch (err) {
+      console.error("Error attempting to toggle fullscreen:", err);
+    }
+  };
 
   return (
     <div className="animate-in fade-in duration-500 max-w-4xl mx-auto">
@@ -264,18 +296,35 @@ export default function SessionTab({ schedules, teacherId }: SessionTabProps) {
             </div>
           </div>
         ) : (
-          <div className="flex flex-col items-center justify-center min-h-[60vh] text-center animate-in zoom-in-95 duration-300">
+          <div 
+            ref={fullscreenRef}
+            className={`flex flex-col items-center justify-center text-center animate-in zoom-in-95 duration-300 relative ${
+              isFullscreen ? 'bg-white p-8 w-full h-full min-h-screen z-50' : 'min-h-[60vh]'
+            }`}
+          >
+            <button
+              onClick={toggleFullscreen}
+              className={`absolute p-3 rounded-xl transition-colors shadow-sm border border-slate-200 focus:outline-none focus:ring-2 focus:ring-[#011B51]/20 cursor-pointer ${
+                isFullscreen 
+                  ? 'top-6 right-6 sm:top-10 sm:right-10 bg-slate-50 hover:bg-slate-100 text-slate-700' 
+                  : 'top-0 right-0 bg-white hover:bg-slate-50 text-slate-400 hover:text-slate-700'
+              }`}
+              title={isFullscreen ? "Exit Fullscreen" : "Present Fullscreen"}
+            >
+              {isFullscreen ? <Minimize className="w-5 h-5 sm:w-6 sm:h-6" /> : <Maximize className="w-5 h-5 sm:w-6 sm:h-6" />}
+            </button>
+
             {activeSchedule && (
               <div className="mb-10 space-y-3">
                 <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest">
                   Active Class Session
                 </h2>
-                <div className="text-3xl font-black text-[#011B51]">
+                <div className={`${isFullscreen ? 'text-4xl sm:text-5xl' : 'text-3xl'} font-black text-[#011B51] transition-all`}>
                   {activeSchedule.course_code}{" "}
                   <span className="text-slate-300 mx-2">|</span> Sec{" "}
                   {activeSchedule.section}
                 </div>
-                <div className="flex items-center justify-center space-x-6 text-slate-500 font-medium text-base">
+                <div className={`flex items-center justify-center space-x-6 text-slate-500 font-medium ${isFullscreen ? 'text-lg sm:text-xl' : 'text-base'} transition-all`}>
                   <span className="flex items-center">
                     <svg
                       className="w-5 h-5 mr-2 text-[#FED702]"
@@ -320,14 +369,14 @@ export default function SessionTab({ schedules, teacherId }: SessionTabProps) {
               </div>
             )}
 
-            <div className="text-[120px] sm:text-[160px] leading-none font-mono font-black text-[#011B51] tracking-[0.15em] mb-12 drop-shadow-sm">
+            <div className={`${isFullscreen ? 'text-[160px] sm:text-[220px]' : 'text-[120px] sm:text-[160px]'} leading-none font-mono font-black text-[#011B51] tracking-[0.15em] mb-12 drop-shadow-sm transition-all`}>
               {activePin}
             </div>
 
             <div
               className={`px-10 py-5 rounded-full border-2 transition-colors ${timeLeft <= 10 ? "bg-rose-50 border-rose-200 text-rose-600" : "bg-slate-50 border-slate-200 text-slate-700"}`}
             >
-              <span className="text-4xl font-black uppercase tracking-widest flex items-center space-x-4">
+              <span className={`font-black uppercase tracking-widest flex items-center space-x-4 ${isFullscreen ? 'text-5xl' : 'text-4xl'} transition-all`}>
                 <span className="relative flex h-5 w-5">
                   <span
                     className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${timeLeft <= 10 ? "bg-rose-500" : "bg-[#FED702]"}`}

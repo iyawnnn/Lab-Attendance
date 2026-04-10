@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { FileX } from "lucide-react";
 
 interface AttendanceTabProps {
   logs: any[];
@@ -96,13 +97,13 @@ export default function AttendanceTab({ logs = [] }: AttendanceTabProps) {
           <input 
             type="text" 
             placeholder="Search student or course..." 
-            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:border-[#011B51] transition-colors" 
+            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/10 transition-all" 
             value={searchTerm} 
             onChange={(e) => setSearchTerm(e.target.value)}
           />
           
           <select 
-            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none cursor-pointer focus:border-[#011B51] transition-colors" 
+            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none cursor-pointer focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/10 transition-all appearance-none" 
             value={classFilter} 
             onChange={(e) => setClassFilter(e.target.value)}
           >
@@ -116,13 +117,13 @@ export default function AttendanceTab({ logs = [] }: AttendanceTabProps) {
 
           <input 
             type="date" 
-            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:border-[#011B51] transition-colors text-slate-600 cursor-pointer"
+            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/10 transition-all text-slate-600 cursor-pointer"
             value={dateFilter}
             onChange={(e) => setDateFilter(e.target.value)}
           />
 
           <select 
-            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none cursor-pointer focus:border-[#011B51] transition-colors" 
+            className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none cursor-pointer focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/10 transition-all appearance-none" 
             value={statusFilter} 
             onChange={(e) => setStatusFilter(e.target.value)}
           >
@@ -141,8 +142,8 @@ export default function AttendanceTab({ logs = [] }: AttendanceTabProps) {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-        <div className="overflow-x-auto flex-1 min-h-[400px]">
-          <table className="w-full text-left text-sm text-slate-600">
+        <div className="custom-scrollbar overflow-auto max-h-[600px]">
+          <table className="w-full text-left text-sm text-slate-600 whitespace-nowrap">
             <thead className="bg-slate-50 border-b border-slate-200 text-[#011B51] uppercase text-[10px] font-black tracking-widest sticky top-0 z-10 shadow-sm">
               <tr>
                 <th className="px-6 py-4">Student</th>
@@ -154,8 +155,16 @@ export default function AttendanceTab({ logs = [] }: AttendanceTabProps) {
             <tbody className="divide-y divide-slate-100">
               {paginatedLogs.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-6 py-16 text-center text-xs font-bold text-slate-400 uppercase tracking-widest bg-white">
-                    No attendance records found matching these filters.
+                  <td colSpan={4} className="px-6 py-20 bg-white">
+                    <div className="flex flex-col items-center justify-center text-center">
+                      <FileX className="w-12 h-12 text-slate-300 mb-4" />
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                        No attendance records found
+                      </p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Try adjusting your filters or search terms.
+                      </p>
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -193,7 +202,7 @@ export default function AttendanceTab({ logs = [] }: AttendanceTabProps) {
         </div>
 
         {filteredLogs.length > 0 && (
-          <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between">
+          <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between sticky bottom-0 z-10">
             <button 
               onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
               disabled={currentPage === 1} 
