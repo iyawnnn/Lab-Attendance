@@ -1,10 +1,11 @@
 // app/api/student/attendance/route.ts
+
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { db } from "@/lib/db";
 
 /**
- * Verifies an ECDSA signature using Node's native crypto module and an SPKI PEM public key.
+ * Verifies an ECDSA signature using Node's native crypto module over PEM public keys.
  */
 function verifyEcdsaSignature(
   message: string,
@@ -26,7 +27,7 @@ function verifyEcdsaSignature(
       signatureBuffer
     );
   } catch (error) {
-    console.error("ECDSA Verification Error:", error);
+    console.error("ECDSA Signature Verification Exception:", error);
     return false;
   }
 }
@@ -36,6 +37,7 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { studentId, labRoom, timestamp, signature, roomPin } = body;
 
+    // 1. Validate required payload parameters
     if (!studentId || !labRoom || !timestamp || !signature || !roomPin) {
       return NextResponse.json(
         { success: false, message: "Missing required attendance parameters." },
@@ -43,13 +45,14 @@ export async function POST(req: Request) {
       );
     }
 
+    // 2. Query Student Record & Stored Public Key
     const student = await db.student.findUnique({
       where: { student_id: studentId },
     });
 
     if (!student) {
       return NextResponse.json(
-        { success: false, message: "Student not found in database. Please register." },
+        { success: false, message: "Student ID not found in database. Please register." },
         { status: 404 }
       );
     }
@@ -64,6 +67,7 @@ export async function POST(req: Request) {
       );
     }
 
+    // 3. Time drift validation (maximum 60-second skew allowed)
     const clientTime = new Date(timestamp).getTime();
     const serverTime = Date.now();
     const allowedDrift = parseInt(process.env.ALLOWED_TIME_DRIFT_MS || "60000", 10);
@@ -75,6 +79,7 @@ export async function POST(req: Request) {
       );
     }
 
+    // 4. Verify Digital Signature
     const messageToVerify = `${studentId}-${labRoom}-${timestamp}`;
     const isValid = verifyEcdsaSignature(
       messageToVerify,
@@ -89,6 +94,7 @@ export async function POST(req: Request) {
       );
     }
 
+    // 5. Query Active Lab Session and PIN Match
     const matchedSchedule = await db.schedule.findFirst({
       where: {
         lab_room: labRoom,
@@ -104,6 +110,7 @@ export async function POST(req: Request) {
       );
     }
 
+    // 6. Check Duplicate Attendance Entries (within 12 hours)
     const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000);
     const existingLog = await db.attendanceLog.findFirst({
       where: {
@@ -120,6 +127,7 @@ export async function POST(req: Request) {
       );
     }
 
+    // 7. Create Attendance Log Entry
     await db.attendanceLog.create({
       data: {
         student_id: studentId,
@@ -133,10 +141,14 @@ export async function POST(req: Request) {
       success: true,
       message: `Attendance securely recorded for ${labRoom}!`,
     });
+
   } catch (error: any) {
-    console.error("Attendance API Error:", error);
+    console.error("Attendance API Exception:", error);
     return NextResponse.json(
-      { success: false, message: "Server error while processing attendance." },
+      { 
+        success: false, 
+        message: error?.message ? `Server Error: ${error.message}` : "Server error while processing attendance." 
+      },
       { status: 500 }
     );
   }
