@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { 
   FileX, 
   UserPlus, 
@@ -143,6 +144,7 @@ interface AttendanceTabProps {
 }
 
 export default function AttendanceTab({ logs = [], schedules = [], teacherUserId }: AttendanceTabProps) {
+  const router = useRouter();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [classFilter, setClassFilter] = useState("");
@@ -159,6 +161,17 @@ export default function AttendanceTab({ logs = [], schedules = [], teacherUserId
   const exportMenuRef = useRef<HTMLDivElement>(null);
 
   const logsPerPage = 10;
+
+  // Real-time auto-polling every 4 seconds when the window is active
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        router.refresh();
+      }
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [router]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -238,6 +251,7 @@ export default function AttendanceTab({ logs = [], schedules = [], teacherUserId
       alert(response.message);
       setManualStudentId("");
       setShowManualEntry(false);
+      router.refresh();
     } else {
       alert(`Error: ${response.message}`);
     }
@@ -315,11 +329,9 @@ export default function AttendanceTab({ logs = [], schedules = [], teacherUserId
 
     const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
 
-    // Top Header Banner (24mm height)
     doc.setFillColor(1, 27, 81);
     doc.rect(0, 0, 210, 24, "F");
 
-    // Header Text
     doc.setTextColor(255, 255, 255);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(14);
@@ -329,12 +341,11 @@ export default function AttendanceTab({ logs = [], schedules = [], teacherUserId
     doc.setFont("helvetica", "normal");
     doc.text("Official Laboratory Class Attendance Sheet", 14, 18);
 
-    // Render Proportional 1:1 Logo (18mm x 18mm, vertically centered)
     try {
       const logoImg = await loadImage("/ua-logo.png");
       const logoSize = 18;
-      const logoX = 210 - 14 - logoSize; // 178mm
-      const logoY = (24 - logoSize) / 2; // 3mm offset
+      const logoX = 210 - 14 - logoSize;
+      const logoY = (24 - logoSize) / 2;
       doc.addImage(logoImg, "PNG", logoX, logoY, logoSize, logoSize);
     } catch (err) {
       console.warn("Could not load university logo for PDF header:", err);
@@ -440,6 +451,23 @@ export default function AttendanceTab({ logs = [], schedules = [], teacherUserId
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-4 relative z-10">
+        
+        {/* Header Title with Live Sync Badge */}
+        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+            </span>
+            <span className="text-xs font-extrabold text-slate-700 tracking-wider uppercase">
+              Live Feed Active
+            </span>
+          </div>
+          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+            Auto-Syncing Every 4s
+          </span>
+        </div>
+
         <div className="flex flex-col lg:flex-row gap-2.5 items-center justify-between w-full">
           <div className="flex flex-wrap lg:flex-nowrap gap-2 w-full lg:flex-1 items-center min-w-0">
             <input

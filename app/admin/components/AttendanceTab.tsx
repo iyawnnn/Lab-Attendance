@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { Search, ChevronDown, Check, X, FileText, Download } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -128,6 +129,7 @@ function FilterDropdown({
 }
 
 export default function AttendanceTab({ logs, schedules }: { logs: AttendanceLog[], schedules: Schedule[] }) {
+  const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [dateFilter, setDateFilter] = useState("");
   const [courseFilter, setCourseFilter] = useState("");
@@ -140,6 +142,17 @@ export default function AttendanceTab({ logs, schedules }: { logs: AttendanceLog
   const exportMenuRef = useRef<HTMLDivElement>(null);
 
   const itemsPerPage = 10;
+
+  // Real-time auto-polling every 4 seconds when the window is active
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        router.refresh();
+      }
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [router]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -254,8 +267,8 @@ export default function AttendanceTab({ logs, schedules }: { logs: AttendanceLog
     try {
       const logoImg = await loadImage("/ua-logo.png");
       const logoSize = 18;
-      const logoX = 210 - 14 - logoSize; // 178mm
-      const logoY = (24 - logoSize) / 2; // 3mm offset
+      const logoX = 210 - 14 - logoSize;
+      const logoY = (24 - logoSize) / 2;
       doc.addImage(logoImg, "PNG", logoX, logoY, logoSize, logoSize);
     } catch (err) {
       console.warn("Could not load university logo for admin PDF header:", err);
@@ -348,9 +361,20 @@ export default function AttendanceTab({ logs, schedules }: { logs: AttendanceLog
       
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
         <div className="flex justify-between items-center mb-5 border-b border-slate-100 pb-4">
-          <div>
-            <h2 className="text-lg font-bold text-slate-900">Record Filters</h2>
-            <p className="text-sm text-slate-500 mt-0.5">Showing {filteredLogs.length} matching records</p>
+          <div className="flex items-center gap-3">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">Record Filters</h2>
+              <p className="text-sm text-slate-500 mt-0.5">Showing {filteredLogs.length} matching records</p>
+            </div>
+            <div className="flex items-center gap-2 bg-slate-100 px-3 py-1 rounded-full">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+              </span>
+              <span className="text-[10px] font-extrabold text-slate-700 uppercase tracking-wider">
+                Live Feed
+              </span>
+            </div>
           </div>
 
           <div ref={exportMenuRef} className="relative">
