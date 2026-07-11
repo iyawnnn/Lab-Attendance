@@ -84,11 +84,91 @@ export async function recoverStudentDevice(studentId: string, pin: string) {
 
 export async function getLabRooms() {
   try {
-    const schedules = await prisma.schedule.findMany({
-      select: { lab_room: true },
-      distinct: ["lab_room"],
+    const timeZone = process.env.NEXT_PUBLIC_APP_TIMEZONE || "Asia/Manila";
+    const now = new Date();
+
+    const timeFormatter = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      hour: "numeric",
+      minute: "numeric",
+      hour12: false,
     });
-    return { success: true, data: schedules.map((s) => s.lab_room) };
+    const timeParts = timeFormatter.formatToParts(now);
+    let hour = 0;
+    let minute = 0;
+    for (const part of timeParts) {
+      if (part.type === "hour") hour = parseInt(part.value, 10);
+      if (part.type === "minute") minute = parseInt(part.value, 10);
+    }
+
+    const currentMinutes = hour * 60 + minute;
+
+    const dateFormatter = new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      weekday: "long",
+    });
+    const dateParts = dateFormatter.formatToParts(now);
+    let year = "";
+    let month = "";
+    let day = "";
+    let weekday = "";
+    for (const part of dateParts) {
+      if (part.type === "year") year = part.value;
+      if (part.type === "month") month = part.value;
+      if (part.type === "day") day = part.value;
+      if (part.type === "weekday") weekday = part.value;
+    }
+
+    const isoDate = `${year}-${month}-${day}`;
+
+    const schedules = await prisma.schedule.findMany({
+      select: {
+        lab_room: true,
+        date: true,
+        schedule: true,
+        active_pin: true,
+        pin_expires_at: true,
+      },
+    });
+
+    const activeRoomsSet = new Set<string>();
+
+    for (const item of schedules) {
+      const isPinActive =
+        item.active_pin &&
+        item.pin_expires_at &&
+        new Date(item.pin_expires_at) > new Date();
+
+      if (isPinActive) {
+        activeRoomsSet.add(item.lab_room);
+        continue;
+      }
+
+      const isToday =
+        item.date === isoDate ||
+        item.date.toLowerCase() === weekday.toLowerCase() ||
+        item.date === "";
+
+      if (isToday && item.schedule) {
+        const [startStr, endStr] = item.schedule.split(/\s*-\s*/);
+        if (startStr && endStr) {
+          const startMins = parseScheduleTime(startStr);
+          const endMins = parseScheduleTime(endStr);
+
+          if (
+            currentMinutes >= startMins - 15 &&
+            currentMinutes <= endMins + 15
+          ) {
+            activeRoomsSet.add(item.lab_room);
+          }
+        }
+      }
+    }
+
+    return { success: true, data: Array.from(activeRoomsSet).sort() };
   } catch (error) {
     return { success: false, data: [] };
   }
