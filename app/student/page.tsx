@@ -47,8 +47,12 @@ export default function SmartStudentPortal() {
       if (privateKey && storedId) {
         const statusCheck = await checkRevokedStatus(storedId);
         
-        // Ghost session check: Revoked OR public keys don't match
-        if (statusCheck.isRevoked || (localPublicKey && statusCheck.currentPublicKey !== localPublicKey)) {
+        const isKeyMismatched = 
+          statusCheck.currentPublicKey && 
+          localPublicKey && 
+          statusCheck.currentPublicKey !== localPublicKey;
+
+        if (statusCheck.isRevoked || isKeyMismatched) {
           await del("student_private_key");
           await del("student_id");
           await del("student_public_key");
@@ -77,8 +81,12 @@ export default function SmartStudentPortal() {
         const statusRes = await checkRevokedStatus(registeredId);
         const localPublicKey = await get("student_public_key");
 
-        // Background ghost session check
-        if (statusRes.isRevoked || (localPublicKey && statusRes.currentPublicKey !== localPublicKey)) {
+        const isKeyMismatched = 
+          statusRes.currentPublicKey && 
+          localPublicKey && 
+          statusRes.currentPublicKey !== localPublicKey;
+
+        if (statusRes.isRevoked || isKeyMismatched) {
           await del("student_private_key");
           await del("student_id");
           await del("student_public_key");
@@ -92,7 +100,7 @@ export default function SmartStudentPortal() {
       }
     }
 
-    const interval = setInterval(verifyActiveSession, 5000);
+    const interval = setInterval(verifyActiveSession, 4000);
     return () => clearInterval(interval);
   }, [view, registeredId]);
 
@@ -187,7 +195,7 @@ export default function SmartStudentPortal() {
       if (dbResponse.success) {
         await set("student_private_key", keyPair.privateKey);
         await set("student_id", studentId);
-        await set("student_public_key", publicKeyBase64); // Save public key locally for ghost check
+        await set("student_public_key", publicKeyBase64);
 
         setRegisteredId(studentId);
 
@@ -275,11 +283,14 @@ export default function SmartStudentPortal() {
         setIsError(true);
         setMessage(response.message);
 
-        if (
+        const isSecurityError = 
           response.message.includes("Student not found") ||
           response.message.includes("DEVICE_REVOKED") ||
-          response.message.includes("Digital signature verification failed")
-        ) {
+          response.message.includes("verification failed") ||
+          response.message.includes("Digital signature") ||
+          response.message.includes("Server error");
+
+        if (isSecurityError) {
           await del("student_private_key");
           await del("student_id");
           await del("student_public_key");
@@ -289,7 +300,7 @@ export default function SmartStudentPortal() {
             setMessage(
               "Security key mismatch detected. Please register this device again."
             );
-          }, 2500);
+          }, 2000);
         }
       }
     } catch (error) {
@@ -314,7 +325,6 @@ export default function SmartStudentPortal() {
         setMessage(response.message);
         await handleIdCheck(studentId);
 
-        // Also ensure web local keys are dropped if user forces a web recovery
         await del("student_private_key");
         await del("student_public_key");
         await del("student_id");
@@ -485,8 +495,8 @@ export default function SmartStudentPortal() {
                 </button>
               </form>
 
-              {isNameLocked && (
-                <div className="text-center mt-4 lg:mt-5">
+              {isNameLocked ? (
+                <div className="mt-8 lg:mt-12 text-center border-t border-slate-100 pt-6 lg:pt-8">
                   <button
                     type="button"
                     onClick={() => {
@@ -496,28 +506,29 @@ export default function SmartStudentPortal() {
                       setLastName("");
                       setMessage("");
                     }}
-                    className="text-xs sm:text-sm font-bold text-slate-400 hover:text-[#011B51] uppercase tracking-wide transition-colors"
+                    className="text-xs sm:text-sm font-bold text-slate-400 hover:text-[#011B51] uppercase tracking-wide transition-colors cursor-pointer"
                   >
                     Not your account? Clear and try again
                   </button>
                 </div>
+              ) : (
+                <div className="mt-8 lg:mt-12 text-center border-t border-slate-100 pt-6 lg:pt-8">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setView("recovery");
+                      setMessage("");
+                      setIsError(false);
+                    }}
+                    className="text-xs sm:text-sm font-bold text-slate-400 hover:text-[#A51A21] uppercase tracking-wide transition-colors cursor-pointer"
+                  >
+                    Lost your device?{" "}
+                    <span className="underline underline-offset-4 decoration-2">
+                      Recover account
+                    </span>
+                  </button>
+                </div>
               )}
-
-              <div className="mt-8 lg:mt-12 text-center border-t border-slate-100 pt-6 lg:pt-8">
-                <button
-                  onClick={() => {
-                    setView("recovery");
-                    setMessage("");
-                    setIsError(false);
-                  }}
-                  className="text-xs sm:text-sm font-bold text-slate-400 hover:text-[#A51A21] uppercase tracking-wide transition-colors cursor-pointer"
-                >
-                  Lost your device?{" "}
-                  <span className="underline underline-offset-4 decoration-2">
-                    Recover account
-                  </span>
-                </button>
-              </div>
             </div>
           )}
 
@@ -558,7 +569,7 @@ export default function SmartStudentPortal() {
                     type="password"
                     placeholder="Enter 4-Digit PIN"
                     maxLength={4}
-                    className="w-full px-4 lg:px-5 py-3.5 lg:py-4 rounded-xl bg-slate-50 border border-slate-200 outline-none text-sm sm:text-base font-medium focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all tracking-[0.3em] shadow-sm"
+                    className="w-full px-4 lg:px-5 py-3.5 lg:py-4 rounded-xl bg-slate-50 border border-slate-200 outline-none text-sm sm:text-base font-medium focus:bg-[#011B51]/5 focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all tracking-[0.3em] shadow-sm"
                     value={recoveryPin}
                     onChange={(e) => setRecoveryPin(e.target.value)}
                     required
@@ -568,7 +579,7 @@ export default function SmartStudentPortal() {
                 <button
                   type="submit"
                   disabled={isRegistering}
-                  className="w-full bg-[#A51A21] hover:bg-[#851319] text-white font-bold py-3.5 lg:py-4 rounded-xl mt-6 lg:mt-8 transition-all shadow-md hover:shadow-lg lg:hover:-translate-y-0.5 border-b-4 border-[#610a10] disabled:opacity-70 disabled:border-[#A51A21] disabled:transform-none text-xs sm:text-sm uppercase tracking-wider"
+                  className="w-full bg-[#A51A21] hover:bg-[#851319] text-white font-bold py-3.5 lg:py-4 rounded-xl mt-6 lg:mt-8 transition-all shadow-md hover:shadow-lg lg:hover:-translate-y-0.5 border-b-4 border-[#610a10] disabled:opacity-70 disabled:border-[#A51A21] disabled:transform-none text-xs sm:text-sm uppercase tracking-wider cursor-pointer"
                 >
                   {isRegistering
                     ? "Processing Request..."
@@ -583,7 +594,7 @@ export default function SmartStudentPortal() {
                     setMessage("");
                     setIsError(false);
                   }}
-                  className="text-xs sm:text-sm font-bold text-slate-400 hover:text-[#011B51] uppercase tracking-wide transition-colors"
+                  className="text-xs sm:text-sm font-bold text-slate-400 hover:text-[#011B51] uppercase tracking-wide transition-colors cursor-pointer"
                 >
                   &larr; Back to Registration
                 </button>

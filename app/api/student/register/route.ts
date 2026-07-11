@@ -2,6 +2,7 @@
 
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import bcrypt from "bcryptjs";
 
 export async function POST(req: Request) {
   try {
@@ -14,16 +15,36 @@ export async function POST(req: Request) {
       );
     }
 
-    // Check if student record already exists in the database
     const existingStudent = await db.student.findUnique({
       where: { student_id: studentId },
     });
 
+    const salt = await bcrypt.genSalt(10);
+    const hashedPin = await bcrypt.hash(recoveryPin, salt);
+
     if (existingStudent) {
+      // Allow registration if the device key was wiped via revocation
+      if (!existingStudent.public_key || existingStudent.public_key === "") {
+        const updatedStudent = await db.student.update({
+          where: { student_id: studentId },
+          data: {
+            public_key: publicKey,
+            recovery_pin: hashedPin,
+          },
+        });
+
+        return NextResponse.json({
+          success: true,
+          message: `Welcome back, ${existingStudent.first_name}! Device registered successfully.`,
+          data: updatedStudent,
+        });
+      }
+
+      // Block registration only if an active device key exists
       return NextResponse.json(
         {
           success: false,
-          message: "This Student ID is already registered in the system. Please use Account Recovery with your 4-digit PIN to authorize this device.",
+          message: "This Student ID is already registered to an active device.",
         },
         { status: 409 }
       );
@@ -36,7 +57,7 @@ export async function POST(req: Request) {
         first_name: firstName,
         last_name: lastName,
         public_key: publicKey,
-        recovery_pin: recoveryPin,
+        recovery_pin: hashedPin,
       },
     });
 
@@ -46,7 +67,7 @@ export async function POST(req: Request) {
       data: newStudent,
     });
   } catch (error) {
-    console.error("Registration Error:", error);
+    console.error("Registration API Error:", error);
     return NextResponse.json(
       { success: false, message: "Server error during registration." },
       { status: 500 }

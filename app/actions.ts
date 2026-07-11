@@ -30,7 +30,7 @@ export async function registerStudentToDatabase(data: {
           where: { student_id: data.studentId },
           data: {
             public_key: data.publicKey,
-            recovery_pin: hashedPin // Update PIN upon registering new device
+            recovery_pin: hashedPin, // Update PIN upon registering new device
           },
         });
         return {
@@ -71,7 +71,8 @@ export async function recoverStudentDevice(studentId: string, pin: string) {
     if (!student.recovery_pin) {
       return {
         success: false,
-        message: "No recovery PIN set for this account. Please contact administrator."
+        message:
+          "No recovery PIN set for this account. Please contact administrator.",
       };
     }
 
@@ -226,48 +227,51 @@ export async function submitAttendance(data: {
       };
     }
 
-    const encoder = new TextEncoder();
-    const encodedMessage = encoder.encode(
-      `${data.studentId}-${data.labRoom}-${data.timestamp}`,
-    );
+    let isValid = false;
 
-    const binarySignature = new Uint8Array(
-      atob(data.signature)
-        .split("")
-        .map((c) => c.charCodeAt(0)),
-    );
-    const binaryPublicKey = new Uint8Array(
-      atob(student.public_key)
-        .split("")
-        .map((c) => c.charCodeAt(0)),
-    );
+    try {
+      const encoder = new TextEncoder();
+      const encodedMessage = encoder.encode(
+        `${data.studentId}-${data.labRoom}-${data.timestamp}`,
+      );
 
-    const importedPublicKey = await globalThis.crypto.subtle.importKey(
-      "spki",
-      binaryPublicKey,
-      { name: "ECDSA", namedCurve: "P-256" },
-      true,
-      ["verify"],
-    );
-    // =========================================================================
-    // ECC CORE ALGORITHM: RELEVANT OPERATION (SIGNATURE VERIFICATION)
-    // Instruction Requirement: Explain other relevant operations
-    // The server retrieves the student's Public Key from the database.
-    // It reconstructs the exact message payload and uses the ECC math to verify 
-    // that the signature matches. If someone tampered with the time or room, 
-    // or if the wrong private key was used, isValid becomes false.
-    // =========================================================================
-    const isValid = await globalThis.crypto.subtle.verify(
-      { name: "ECDSA", hash: { name: "SHA-256" } },
-      importedPublicKey,
-      binarySignature,
-      encodedMessage,
-    );
+      const binarySignature = new Uint8Array(
+        atob(data.signature)
+          .split("")
+          .map((c) => c.charCodeAt(0)),
+      );
+      const binaryPublicKey = new Uint8Array(
+        atob(student.public_key)
+          .split("")
+          .map((c) => c.charCodeAt(0)),
+      );
+
+      const importedPublicKey = await globalThis.crypto.subtle.importKey(
+        "spki",
+        binaryPublicKey,
+        { name: "ECDSA", namedCurve: "P-256" },
+        true,
+        ["verify"],
+      );
+
+      isValid = await globalThis.crypto.subtle.verify(
+        { name: "ECDSA", hash: { name: "SHA-256" } },
+        importedPublicKey,
+        binarySignature,
+        encodedMessage,
+      );
+    } catch (cryptoErr) {
+      console.warn("ECC Signature Import/Verification Error:", cryptoErr);
+      return {
+        success: false,
+        message: "Digital signature verification failed. Security key mismatch detected.",
+      };
+    }
 
     if (!isValid) {
       return {
         success: false,
-        message: "Digital signature verification failed.",
+        message: "Digital signature verification failed. Security key mismatch detected.",
       };
     }
 
@@ -349,9 +353,10 @@ export async function submitAttendance(data: {
       message: `Attendance securely recorded. Status: ${attendanceStatus}`,
     };
   } catch (error) {
+    console.error("Attendance Server Exception:", error);
     return {
       success: false,
-      message: "Server error while processing attendance.",
+      message: "Digital signature verification failed. Security key mismatch detected.",
     };
   }
 }
@@ -520,7 +525,7 @@ export async function checkRevokedStatus(studentId: string) {
 
     if (!student) return { isRevoked: true };
 
-    if (student.public_key === "") {
+    if (!student.public_key || student.public_key === "") {
       return {
         isRevoked: true,
         firstName: student.first_name,
@@ -528,8 +533,13 @@ export async function checkRevokedStatus(studentId: string) {
       };
     }
 
-    // Return the active public key to the client for comparison
-    return { isRevoked: false, currentPublicKey: student.public_key };
+    // Always return current database public key so clients can detect transfers
+    return {
+      isRevoked: false,
+      currentPublicKey: student.public_key,
+      firstName: student.first_name,
+      lastName: student.last_name,
+    };
   } catch (error) {
     return { isRevoked: false };
   }
@@ -629,7 +639,6 @@ export async function loginTeacher(userId: string, passwordString: string) {
   }
 }
 
-// BATCH AND INDIVIDUAL ASSIGNMENT FIXES (No third argument for 'teacherName')
 export async function assignTeacherToMultipleSchedules(
   scheduleIds: number[],
   teacherId: number,

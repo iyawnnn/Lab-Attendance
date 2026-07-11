@@ -19,17 +19,24 @@ export async function GET(req: Request) {
       where: { student_id: studentId },
     });
 
-    if (!student || !student.public_key || student.public_key === "") {
+    if (!student) {
       return NextResponse.json({
         success: true,
         isRevoked: true,
-        message: "Device access revoked or student record not found.",
+        message: "Student record not found.",
       });
     }
 
+    const isRevoked = !student.public_key || student.public_key === "";
+
     return NextResponse.json({
       success: true,
-      isRevoked: false,
+      isRevoked,
+      firstName: student.first_name,
+      lastName: student.last_name,
+      first_name: student.first_name,
+      last_name: student.last_name,
+      currentPublicKey: student.public_key || "",
     });
   } catch (error) {
     return NextResponse.json(

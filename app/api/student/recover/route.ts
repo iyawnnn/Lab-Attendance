@@ -7,7 +7,7 @@ import bcrypt from "bcryptjs";
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { studentId, pin, newPublicKey } = body;
+    const { studentId, pin, newPublicKey, newPin } = body;
 
     if (!studentId || !pin) {
       return NextResponse.json(
@@ -37,25 +37,31 @@ export async function POST(request: Request) {
     const isPinValid = await bcrypt.compare(pin, student.recovery_pin);
     if (!isPinValid) {
       return NextResponse.json(
-        { success: false, message: "Incorrect Recovery PIN." },
+        { success: false, message: "Incorrect Current Security PIN." },
         { status: 401 }
       );
     }
 
-    // If a new public key is provided (Mobile App Recovery), link it immediately.
-    // If no key is provided (Web App Revocation), just clear the existing key.
-    const updatedPublicKey = newPublicKey ? newPublicKey : "";
+    const updateData: { public_key: string; recovery_pin?: string } = {
+      public_key: newPublicKey ? newPublicKey : "",
+    };
+
+    // Hash and update to the new PIN if provided
+    if (newPin && newPin.length === 4) {
+      const salt = await bcrypt.genSalt(10);
+      updateData.recovery_pin = await bcrypt.hash(newPin, salt);
+    }
 
     await db.student.update({
       where: { student_id: studentId },
-      data: { public_key: updatedPublicKey },
+      data: updateData,
     });
 
     return NextResponse.json(
       { 
         success: true, 
         message: newPublicKey 
-          ? "Account recovered and linked to this device successfully." 
+          ? "Account recovered, device linked, and Security PIN updated successfully." 
           : "Device access revoked successfully."
       },
       { status: 200 }
