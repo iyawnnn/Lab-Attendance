@@ -1,40 +1,54 @@
-import { NextResponse } from "next/server";
-import { registerStudentToDatabase } from "@/app/actions";
+// app/api/student/register/route.ts
 
-export async function POST(request: Request) {
+import { NextResponse } from "next/server";
+import { db } from "@/lib/db";
+
+export async function POST(req: Request) {
   try {
-    const body = await request.json();
-    const { studentId, firstName, lastName, publicKey, recoveryPin } = body;
+    const { studentId, firstName, lastName, publicKey, recoveryPin } = await req.json();
 
     if (!studentId || !firstName || !lastName || !publicKey || !recoveryPin) {
       return NextResponse.json(
-        { success: false, message: "Missing required registration parameters." },
+        { success: false, message: "All fields are required." },
         { status: 400 }
       );
     }
 
-    const result = await registerStudentToDatabase({
-      studentId,
-      firstName,
-      lastName,
-      publicKey,
-      recoveryPin,
+    // Check if student record already exists in the database
+    const existingStudent = await db.student.findUnique({
+      where: { student_id: studentId },
     });
 
-    if (!result.success) {
+    if (existingStudent) {
       return NextResponse.json(
-        { success: false, message: result.message },
-        { status: result.message.includes("already registered") ? 409 : 400 }
+        {
+          success: false,
+          message: "This Student ID is already registered in the system. Please use Account Recovery with your 4-digit PIN to authorize this device.",
+        },
+        { status: 409 }
       );
     }
 
-    return NextResponse.json(
-      { success: true, message: result.message },
-      { status: 201 }
-    );
+    // Register brand new student record
+    const newStudent = await db.student.create({
+      data: {
+        student_id: studentId,
+        first_name: firstName,
+        last_name: lastName,
+        public_key: publicKey,
+        recovery_pin: recoveryPin,
+      },
+    });
+
+    return NextResponse.json({
+      success: true,
+      message: "Device registered successfully.",
+      data: newStudent,
+    });
   } catch (error) {
+    console.error("Registration Error:", error);
     return NextResponse.json(
-      { success: false, message: "Internal server error during registration processing." },
+      { success: false, message: "Server error during registration." },
       { status: 500 }
     );
   }

@@ -44,6 +44,16 @@ export default function SmartStudentPortal() {
       const storedId = await get("student_id");
 
       if (privateKey && storedId) {
+        const statusCheck = await checkRevokedStatus(storedId);
+        if (statusCheck.isRevoked) {
+          await del("student_private_key");
+          await del("student_id");
+          setView("register");
+          setIsError(true);
+          setMessage("Device access was revoked. Please register again.");
+          return;
+        }
+
         setRegisteredId(storedId);
         setView("attendance");
         fetchRooms();
@@ -54,6 +64,29 @@ export default function SmartStudentPortal() {
 
     initialize();
   }, []);
+
+  useEffect(() => {
+    if (view !== "attendance" || !registeredId) return;
+
+    async function verifyActiveSession() {
+      if (document.visibilityState === "visible" && registeredId) {
+        const statusRes = await checkRevokedStatus(registeredId);
+        if (statusRes.isRevoked) {
+          await del("student_private_key");
+          await del("student_id");
+          setRegisteredId(null);
+          setView("register");
+          setIsError(true);
+          setMessage(
+            "Device authorization revoked or recovered. Please register this device again."
+          );
+        }
+      }
+    }
+
+    const interval = setInterval(verifyActiveSession, 5000);
+    return () => clearInterval(interval);
+  }, [view, registeredId]);
 
   useEffect(() => {
     function updateLocalTime() {
@@ -100,7 +133,7 @@ export default function SmartStudentPortal() {
         setLastName(response.lastName || "");
         setIsNameLocked(true);
         setMessage(
-          "Account found. Please enter a new PIN to register this device.",
+          "Account found. Please enter a new PIN to register this device."
         );
         setIsError(false);
       } else {
@@ -123,21 +156,14 @@ export default function SmartStudentPortal() {
     setIsError(false);
 
     try {
-// =========================================================================
-// ECC CORE ALGORITHM: KEY GENERATION 
-// Instruction Requirement: Explain Key Generation
-// Using the Web Crypto API, we generate an ECDSA P-256 Elliptic Curve key pair.
-// The Private Key is securely stored in the browser (idb-keyval) and never leaves the device.
-// The Public Key is exported as base64 and saved to the database.
-// =========================================================================
       const keyPair = await window.crypto.subtle.generateKey(
         { name: "ECDSA", namedCurve: "P-256" },
         false,
-        ["sign", "verify"],
+        ["sign", "verify"]
       );
       const exportedPublicKey = await window.crypto.subtle.exportKey(
         "spki",
-        keyPair.publicKey,
+        keyPair.publicKey
       );
       const publicKeyArray = Array.from(new Uint8Array(exportedPublicKey));
       const publicKeyBase64 = btoa(String.fromCharCode(...publicKeyArray));
@@ -170,7 +196,7 @@ export default function SmartStudentPortal() {
       console.error(error);
       setIsError(true);
       setMessage(
-        "Server Error: Database connection failed. Keys were NOT saved.",
+        "Server Error: Database connection failed. Keys were NOT saved."
       );
     } finally {
       setIsRegistering(false);
@@ -183,7 +209,7 @@ export default function SmartStudentPortal() {
     if (!roomPin || roomPin.length !== 4) {
       setIsError(true);
       setMessage(
-        "Please enter the 4-digit Room PIN displayed by your instructor.",
+        "Please enter the 4-digit Room PIN displayed by your instructor."
       );
       return;
     }
@@ -216,17 +242,11 @@ export default function SmartStudentPortal() {
       const messageToSign = `${storedStudentId}-${selectedRoom}-${timestamp}`;
       const encoder = new TextEncoder();
       const encodedMessage = encoder.encode(messageToSign);
-// =========================================================================
-// ECC CORE ALGORITHM: RELEVANT OPERATION (DIGITAL SIGNING)
-// Instruction Requirement: Explain other relevant operations
-// Instead of encryption (hiding data), attendance requires Data Integrity and Non-Repudiation.
-// We use the student's Private Key to digitally 'Sign' a payload (ID + Room + Timestamp).
-// This generates a cryptographic signature proving the student is physically present.
-// =========================================================================
+
       const rawSignature = await window.crypto.subtle.sign(
         { name: "ECDSA", hash: { name: "SHA-256" } },
         privateKey,
-        encodedMessage,
+        encodedMessage
       );
       const signatureArray = Array.from(new Uint8Array(rawSignature));
       const signatureBase64 = btoa(String.fromCharCode(...signatureArray));
@@ -257,7 +277,7 @@ export default function SmartStudentPortal() {
             setView("register");
             setIsError(false);
             setMessage(
-              "Security key mismatch detected. Please register this device again.",
+              "Security key mismatch detected. Please register this device again."
             );
           }, 2500);
         }
