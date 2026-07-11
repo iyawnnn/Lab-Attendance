@@ -28,7 +28,10 @@ export async function registerStudentToDatabase(data: {
       if (existingStudent.public_key === "") {
         await prisma.student.update({
           where: { student_id: data.studentId },
-          data: { public_key: data.publicKey, recovery_pin: hashedPin },
+          data: {
+            public_key: data.publicKey,
+            recovery_pin: hashedPin // Update PIN upon registering new device
+          },
         });
         return {
           success: true,
@@ -65,14 +68,23 @@ export async function recoverStudentDevice(studentId: string, pin: string) {
     if (!student)
       return { success: false, message: "Student ID not found in the system." };
 
+    if (!student.recovery_pin) {
+      return {
+        success: false,
+        message: "No recovery PIN set for this account. Please contact administrator."
+      };
+    }
+
     const isPinValid = await bcrypt.compare(pin, student.recovery_pin);
     if (!isPinValid)
       return { success: false, message: "Incorrect Recovery PIN." };
 
+    // Clear ONLY the public key to revoke device access while preserving the PIN
     await prisma.student.update({
       where: { student_id: studentId },
-      data: { public_key: "", recovery_pin: "" },
+      data: { public_key: "" },
     });
+
     return {
       success: true,
       message: "Device access revoked. You may now register your new device.",
@@ -237,14 +249,14 @@ export async function submitAttendance(data: {
       true,
       ["verify"],
     );
-// =========================================================================
-// ECC CORE ALGORITHM: RELEVANT OPERATION (SIGNATURE VERIFICATION)
-// Instruction Requirement: Explain other relevant operations
-// The server retrieves the student's Public Key from the database.
-// It reconstructs the exact message payload and uses the ECC math to verify 
-// that the signature matches. If someone tampered with the time or room, 
-// or if the wrong private key was used, isValid becomes false.
-// =========================================================================
+    // =========================================================================
+    // ECC CORE ALGORITHM: RELEVANT OPERATION (SIGNATURE VERIFICATION)
+    // Instruction Requirement: Explain other relevant operations
+    // The server retrieves the student's Public Key from the database.
+    // It reconstructs the exact message payload and uses the ECC math to verify 
+    // that the signature matches. If someone tampered with the time or room, 
+    // or if the wrong private key was used, isValid becomes false.
+    // =========================================================================
     const isValid = await globalThis.crypto.subtle.verify(
       { name: "ECDSA", hash: { name: "SHA-256" } },
       importedPublicKey,
@@ -505,13 +517,19 @@ export async function checkRevokedStatus(studentId: string) {
     const student = await prisma.student.findUnique({
       where: { student_id: studentId },
     });
-    if (student && student.public_key === "")
+
+    if (!student) return { isRevoked: true };
+
+    if (student.public_key === "") {
       return {
         isRevoked: true,
         firstName: student.first_name,
         lastName: student.last_name,
       };
-    return { isRevoked: false };
+    }
+
+    // Return the active public key to the client for comparison
+    return { isRevoked: false, currentPublicKey: student.public_key };
   } catch (error) {
     return { isRevoked: false };
   }

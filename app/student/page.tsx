@@ -42,15 +42,19 @@ export default function SmartStudentPortal() {
     async function initialize() {
       const privateKey = await get("student_private_key");
       const storedId = await get("student_id");
+      const localPublicKey = await get("student_public_key");
 
       if (privateKey && storedId) {
         const statusCheck = await checkRevokedStatus(storedId);
-        if (statusCheck.isRevoked) {
+        
+        // Ghost session check: Revoked OR public keys don't match
+        if (statusCheck.isRevoked || (localPublicKey && statusCheck.currentPublicKey !== localPublicKey)) {
           await del("student_private_key");
           await del("student_id");
+          await del("student_public_key");
           setView("register");
           setIsError(true);
-          setMessage("Device access was revoked. Please register again.");
+          setMessage("Device access was revoked or transferred to another device.");
           return;
         }
 
@@ -71,14 +75,18 @@ export default function SmartStudentPortal() {
     async function verifyActiveSession() {
       if (document.visibilityState === "visible" && registeredId) {
         const statusRes = await checkRevokedStatus(registeredId);
-        if (statusRes.isRevoked) {
+        const localPublicKey = await get("student_public_key");
+
+        // Background ghost session check
+        if (statusRes.isRevoked || (localPublicKey && statusRes.currentPublicKey !== localPublicKey)) {
           await del("student_private_key");
           await del("student_id");
+          await del("student_public_key");
           setRegisteredId(null);
           setView("register");
           setIsError(true);
           setMessage(
-            "Device authorization revoked or recovered. Please register this device again."
+            "Device authorization revoked or transferred. Please register this device again."
           );
         }
       }
@@ -179,6 +187,7 @@ export default function SmartStudentPortal() {
       if (dbResponse.success) {
         await set("student_private_key", keyPair.privateKey);
         await set("student_id", studentId);
+        await set("student_public_key", publicKeyBase64); // Save public key locally for ghost check
 
         setRegisteredId(studentId);
 
@@ -273,6 +282,7 @@ export default function SmartStudentPortal() {
         ) {
           await del("student_private_key");
           await del("student_id");
+          await del("student_public_key");
           setTimeout(() => {
             setView("register");
             setIsError(false);
@@ -303,6 +313,11 @@ export default function SmartStudentPortal() {
       if (response.success) {
         setMessage(response.message);
         await handleIdCheck(studentId);
+
+        // Also ensure web local keys are dropped if user forces a web recovery
+        await del("student_private_key");
+        await del("student_public_key");
+        await del("student_id");
 
         setTimeout(() => {
           setMessage("");
