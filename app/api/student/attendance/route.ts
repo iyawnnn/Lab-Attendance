@@ -5,7 +5,7 @@ import crypto from "crypto";
 import { db } from "@/lib/db";
 
 /**
- * Verifies an ECDSA signature using Node's native crypto module over PEM public keys.
+ * Verifies an ECDSA digital signature using Node.js crypto and SPKI PEM public key.
  */
 function verifyEcdsaSignature(
   message: string,
@@ -27,7 +27,7 @@ function verifyEcdsaSignature(
       signatureBuffer
     );
   } catch (error) {
-    console.error("ECDSA Signature Verification Exception:", error);
+    console.error("ECDSA Verification Exception:", error);
     return false;
   }
 }
@@ -37,7 +37,7 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { studentId, labRoom, timestamp, signature, roomPin } = body;
 
-    // 1. Validate required payload parameters
+    // 1. Validate payload parameters
     if (!studentId || !labRoom || !timestamp || !signature || !roomPin) {
       return NextResponse.json(
         { success: false, message: "Missing required attendance parameters." },
@@ -45,14 +45,14 @@ export async function POST(req: Request) {
       );
     }
 
-    // 2. Query Student Record & Stored Public Key
+    // 2. Query Student Record
     const student = await db.student.findUnique({
       where: { student_id: studentId },
     });
 
     if (!student) {
       return NextResponse.json(
-        { success: false, message: "Student ID not found in database. Please register." },
+        { success: false, message: "Student not found in database. Please register." },
         { status: 404 }
       );
     }
@@ -67,14 +67,14 @@ export async function POST(req: Request) {
       );
     }
 
-    // 3. Time drift validation (maximum 60-second skew allowed)
+    // 3. Time drift validation (60-second limit)
     const clientTime = new Date(timestamp).getTime();
     const serverTime = Date.now();
     const allowedDrift = parseInt(process.env.ALLOWED_TIME_DRIFT_MS || "60000", 10);
 
     if (isNaN(clientTime) || Math.abs(serverTime - clientTime) > allowedDrift) {
       return NextResponse.json(
-        { success: false, message: "Request rejected: Clock desynchronization detected. Check your phone's time settings." },
+        { success: false, message: "Request rejected: Clock desynchronization detected. Check your phone time settings." },
         { status: 400 }
       );
     }
@@ -94,7 +94,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 5. Query Active Lab Session and PIN Match
+    // 5. Query Active Lab Session & PIN
     const matchedSchedule = await db.schedule.findFirst({
       where: {
         lab_room: labRoom,
@@ -110,7 +110,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 6. Check Duplicate Attendance Entries (within 12 hours)
+    // 6. Check Duplicate Attendance (12-hour window)
     const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000);
     const existingLog = await db.attendanceLog.findFirst({
       where: {
@@ -127,7 +127,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // 7. Create Attendance Log Entry
+    // 7. Record Log in Database
     await db.attendanceLog.create({
       data: {
         student_id: studentId,
@@ -143,7 +143,7 @@ export async function POST(req: Request) {
     });
 
   } catch (error: any) {
-    console.error("Attendance API Exception:", error);
+    console.error("Attendance API Error:", error);
     return NextResponse.json(
       { 
         success: false, 
