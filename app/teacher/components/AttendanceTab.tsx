@@ -1,10 +1,30 @@
 "use client";
 
 import { useState, useMemo, useEffect, useRef } from "react";
-import { FileX, UserPlus, Search, ChevronDown, Check, X } from "lucide-react";
+import { 
+  FileX, 
+  UserPlus, 
+  Search, 
+  ChevronDown, 
+  Check, 
+  X, 
+  FileText, 
+  Download 
+} from "lucide-react";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import { manuallyAdmitStudent } from "../../actions";
 
-// --- CUSTOM UI COMPONENT: Filter Dropdown ---
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "Anonymous";
+    img.src = src;
+    img.onload = () => resolve(img);
+    img.onerror = (err) => reject(err);
+  });
+}
+
 function FilterDropdown({ 
   options, 
   value, 
@@ -49,30 +69,30 @@ function FilterDropdown({
     <div ref={dropdownRef} className="relative w-full">
       <div
         onClick={() => setIsOpen(!isOpen)}
-        className={`w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100 border transition-all rounded-lg text-sm cursor-pointer flex justify-between items-center shadow-sm ${isOpen ? 'border-[#011B51] ring-2 ring-[#011B51]/10' : 'border-slate-200'}`}
+        className={`w-full px-3 py-2 bg-slate-50 hover:bg-slate-100 border transition-all rounded-lg text-sm cursor-pointer flex justify-between items-center shadow-sm h-[38px] ${isOpen ? 'border-[#011B51] ring-2 ring-[#011B51]/10' : 'border-slate-200'}`}
       >
-        <span className={`truncate mr-2 ${selectedOption ? "text-[#011B51] font-bold" : "text-slate-500 font-medium"}`}>
+        <span className={`truncate mr-1 text-xs ${selectedOption ? "text-[#011B51] font-bold" : "text-slate-500 font-medium"}`}>
           {selectedOption ? selectedOption.label : placeholder}
         </span>
-        <ChevronDown size={16} className={`text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown size={14} className={`text-slate-400 shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
       </div>
 
       {isOpen && (
         <div className="absolute z-50 w-full mt-1.5 bg-white border border-slate-200 rounded-lg shadow-xl flex flex-col overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
           {showSearch && (
-            <div className="p-2.5 border-b border-slate-100 flex items-center gap-2 bg-slate-50/80">
+            <div className="p-2 border-b border-slate-100 flex items-center gap-2 bg-slate-50/80">
               <Search size={14} className="text-slate-400 shrink-0" />
               <input
                 type="text"
                 autoFocus
                 placeholder="Search..."
-                className="w-full bg-transparent outline-none text-sm text-slate-700 font-medium placeholder:text-slate-400"
+                className="w-full bg-transparent outline-none text-xs text-slate-700 font-medium placeholder:text-slate-400"
                 value={query}
                 onChange={e => setQuery(e.target.value)}
               />
             </div>
           )}
-          <div className="overflow-y-auto max-h-[240px] flex-1 p-1.5 custom-scrollbar">
+          <div className="overflow-y-auto max-h-[200px] flex-1 p-1 custom-scrollbar">
             {allowClear && value && (
                <div
                  onClick={() => {
@@ -80,15 +100,15 @@ function FilterDropdown({
                    setIsOpen(false);
                    setQuery("");
                  }}
-                 className="px-3 py-2.5 mb-1 text-sm rounded-md cursor-pointer flex items-center gap-2 text-slate-500 hover:bg-slate-100 transition-colors"
+                 className="px-2.5 py-2 mb-1 text-xs rounded-md cursor-pointer flex items-center gap-2 text-slate-500 hover:bg-slate-100 transition-colors"
                >
-                 <X size={14} />
+                 <X size={13} />
                  <span className="italic">{clearText}</span>
                </div>
             )}
             
             {filteredOptions.length === 0 ? (
-              <div className="p-4 text-xs font-bold uppercase tracking-widest text-slate-400 text-center">No matches found</div>
+              <div className="p-3 text-[10px] font-bold uppercase tracking-widest text-slate-400 text-center">No matches found</div>
             ) : (
               filteredOptions.map(opt => (
                 <div
@@ -98,14 +118,14 @@ function FilterDropdown({
                     setIsOpen(false);
                     setQuery("");
                   }}
-                  className={`px-3 py-2.5 text-sm rounded-md cursor-pointer flex items-center justify-between transition-colors ${
+                  className={`px-2.5 py-2 text-xs rounded-md cursor-pointer flex items-center justify-between transition-colors ${
                     value === opt.id 
                       ? 'bg-[#011B51]/5 text-[#011B51] font-bold' 
                       : 'hover:bg-slate-50 text-slate-700 font-medium'
                   }`}
                 >
-                  <span className="truncate pr-4">{opt.label}</span>
-                  {value === opt.id && <Check size={14} className="text-[#011B51] shrink-0" />}
+                  <span className="truncate pr-2">{opt.label}</span>
+                  {value === opt.id && <Check size={13} className="text-[#011B51] shrink-0" />}
                 </div>
               ))
             )}
@@ -115,7 +135,6 @@ function FilterDropdown({
     </div>
   );
 }
-// --------------------------------------------------------
 
 interface AttendanceTabProps {
   logs: any[];
@@ -130,16 +149,27 @@ export default function AttendanceTab({ logs = [], schedules = [], teacherUserId
   const [dateFilter, setDateFilter] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Manual Override State
   const [showManualEntry, setShowManualEntry] = useState(false);
   const [manualStudentId, setManualStudentId] = useState("");
   const [manualScheduleId, setManualScheduleId] = useState("");
   const [manualStatus, setManualStatus] = useState("ON_TIME");
   const [isOverriding, setIsOverriding] = useState(false);
 
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+
   const logsPerPage = 10;
 
-  // Format options for our custom dropdowns
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(event.target as Node)) {
+        setIsExportMenuOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const scheduleOptions = useMemo(() => {
     return schedules.map(sched => ({
       id: sched.id.toString(),
@@ -222,8 +252,9 @@ export default function AttendanceTab({ logs = [], schedules = [], teacherUserId
   }, [filteredLogs, currentPage]);
 
   const exportToCSV = () => {
+    setIsExportMenuOpen(false);
     if (filteredLogs.length === 0) {
-      alert("No data to export.");
+      alert("No data available to export.");
       return;
     }
 
@@ -267,7 +298,7 @@ export default function AttendanceTab({ logs = [], schedules = [], teacherUserId
     link.setAttribute("href", url);
     link.setAttribute(
       "download",
-      `Class_Attendance_${new Date().toISOString().split("T")[0]}.csv`,
+      `UA_Attendance_${dateFilter || 'All_Dates'}.csv`,
     );
     link.style.visibility = "hidden";
     document.body.appendChild(link);
@@ -275,22 +306,151 @@ export default function AttendanceTab({ logs = [], schedules = [], teacherUserId
     document.body.removeChild(link);
   };
 
+  const exportToPDF = async () => {
+    setIsExportMenuOpen(false);
+    if (filteredLogs.length === 0) {
+      alert("No data available to export to PDF.");
+      return;
+    }
+
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+
+    // Top Header Banner (24mm height)
+    doc.setFillColor(1, 27, 81);
+    doc.rect(0, 0, 210, 24, "F");
+
+    // Header Text
+    doc.setTextColor(255, 255, 255);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.text("UNIVERSITY OF ASSUMPTION", 14, 11);
+
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.text("Official Laboratory Class Attendance Sheet", 14, 18);
+
+    // Render Proportional 1:1 Logo (18mm x 18mm, vertically centered)
+    try {
+      const logoImg = await loadImage("/ua-logo.png");
+      const logoSize = 18;
+      const logoX = 210 - 14 - logoSize; // 178mm
+      const logoY = (24 - logoSize) / 2; // 3mm offset
+      doc.addImage(logoImg, "PNG", logoX, logoY, logoSize, logoSize);
+    } catch (err) {
+      console.warn("Could not load university logo for PDF header:", err);
+    }
+
+    const selectedSchedule = schedules.find(s => s.id.toString() === classFilter);
+    const courseText = selectedSchedule 
+      ? `${selectedSchedule.course_code} - Section ${selectedSchedule.section}` 
+      : "All Classes";
+    const roomText = selectedSchedule ? selectedSchedule.lab_room : "All Facilities";
+    const dateText = dateFilter 
+      ? new Date(dateFilter).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) 
+      : "All Dates";
+    const statusText = statusFilter 
+      ? (statusFilter === "ON_TIME" ? "On Time" : "Late") 
+      : "All Statuses";
+
+    doc.setTextColor(51, 65, 85);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+
+    doc.text("Course & Section:", 14, 32);
+    doc.setFont("helvetica", "normal");
+    doc.text(courseText, 45, 32);
+
+    doc.setFont("helvetica", "bold");
+    doc.text("Facility / Room:", 14, 38);
+    doc.setFont("helvetica", "normal");
+    doc.text(roomText, 45, 38);
+
+    doc.setFont("helvetica", "bold");
+    doc.text("Class Date:", 120, 32);
+    doc.setFont("helvetica", "normal");
+    doc.text(dateText, 142, 32);
+
+    doc.setFont("helvetica", "bold");
+    doc.text("Total Logs:", 120, 38);
+    doc.setFont("helvetica", "normal");
+    doc.text(`${filteredLogs.length} Records (${statusText})`, 142, 38);
+
+    doc.setDrawColor(226, 232, 240);
+    doc.line(14, 43, 196, 43);
+
+    const tableHeaders = [
+      ["Student ID", "Student Name", "Course & Sec", "Room", "Status", "Timestamp", "Method"]
+    ];
+
+    const tableRows = filteredLogs.map((log) => {
+      const isManual = log.signature && log.signature.includes("OVERRIDE");
+      return [
+        log.student.student_id,
+        `${log.student.last_name}, ${log.student.first_name}`,
+        `${log.schedule?.course_code || "N/A"} (${log.schedule?.section || "N/A"})`,
+        log.schedule?.lab_room || "N/A",
+        log.status === "ON_TIME" ? "ON TIME" : "LATE",
+        new Date(log.timestamp).toLocaleString([], {
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit"
+        }),
+        isManual ? "Manual" : "Device"
+      ];
+    });
+
+    autoTable(doc, {
+      startY: 46,
+      head: tableHeaders,
+      body: tableRows,
+      theme: "striped",
+      headStyles: {
+        fillColor: [1, 27, 81],
+        textColor: [255, 255, 255],
+        fontStyle: "bold",
+        fontSize: 8,
+      },
+      bodyStyles: {
+        fontSize: 8,
+        textColor: [51, 65, 85],
+      },
+      alternateRowStyles: {
+        fillColor: [248, 250, 252],
+      },
+      margin: { top: 46, bottom: 20, left: 14, right: 14 },
+      didDrawPage: (data) => {
+        const pageCount = doc.internal.pages.length - 1;
+        doc.setFontSize(8);
+        doc.setTextColor(148, 163, 184);
+        doc.text(
+          `Page ${data.pageNumber} of ${pageCount} - University of Assumption Laboratory Attendance System`,
+          14,
+          287
+        );
+      },
+    });
+
+    const fileSuffix = selectedSchedule 
+      ? `${selectedSchedule.course_code}_Sec${selectedSchedule.section}` 
+      : "Master_Log";
+    doc.save(`UA_Attendance_${fileSuffix}_${dateFilter || 'All_Dates'}.pdf`);
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-4 relative z-10">
-        
-        <div className="flex flex-col xl:flex-row gap-4 items-center justify-between w-full">
-          {/* Filters Area */}
-          <div className="flex flex-wrap gap-3 w-full xl:flex-1 items-center">
+        <div className="flex flex-col lg:flex-row gap-2.5 items-center justify-between w-full">
+          <div className="flex flex-wrap lg:flex-nowrap gap-2 w-full lg:flex-1 items-center min-w-0">
             <input
               type="text"
               placeholder="Search student or course..."
-              className="flex-1 min-w-[200px] px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/10 transition-all shadow-sm"
+              className="flex-1 min-w-[140px] px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium outline-none focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/10 transition-all shadow-sm h-[38px]"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
 
-            <div className="w-full sm:w-auto sm:min-w-[240px]">
+            <div className="w-full sm:w-[180px] lg:w-[210px] shrink-0">
               <FilterDropdown
                 options={scheduleOptions}
                 value={classFilter}
@@ -303,12 +463,12 @@ export default function AttendanceTab({ logs = [], schedules = [], teacherUserId
 
             <input
               type="date"
-              className="w-full sm:w-auto sm:max-w-[160px] px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/10 transition-all text-slate-600 cursor-pointer shadow-sm"
+              className="w-full sm:w-[130px] shrink-0 px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium outline-none focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/10 transition-all text-slate-600 cursor-pointer shadow-sm h-[38px]"
               value={dateFilter}
               onChange={(e) => setDateFilter(e.target.value)}
             />
 
-            <div className="w-full sm:w-auto sm:min-w-[150px]">
+            <div className="w-full sm:w-[125px] shrink-0">
               <FilterDropdown
                 options={statusOptions}
                 value={statusFilter}
@@ -321,28 +481,51 @@ export default function AttendanceTab({ logs = [], schedules = [], teacherUserId
             </div>
           </div>
 
-          <div className="flex gap-2 w-full xl:w-auto shrink-0 mt-4 xl:mt-0">
+          <div className="flex items-center gap-2 w-full lg:w-auto shrink-0 justify-end mt-2 lg:mt-0">
             <button
               onClick={() => setShowManualEntry(!showManualEntry)}
-              className={`flex-1 xl:flex-none py-2.5 px-4 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer shadow-sm flex items-center justify-center gap-2 ${
+              className={`h-[38px] py-2 px-3.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors cursor-pointer shadow-sm flex items-center justify-center gap-1.5 whitespace-nowrap ${
                 showManualEntry 
-                  ? "bg-slate-200 text-[#011B51] inset-shadow-sm" 
+                  ? "bg-slate-200 text-[#011B51]" 
                   : "bg-slate-100 hover:bg-slate-200 text-[#011B51]"
               }`}
             >
-              <UserPlus size={16} />
+              <UserPlus size={15} />
               Manual Admit
             </button>
-            <button
-              onClick={exportToCSV}
-              className="flex-1 xl:flex-none bg-[#011B51] hover:bg-[#022a7a] border-b-2 border-[#A51A21] text-white font-bold py-2.5 px-6 rounded-lg text-xs uppercase tracking-wider transition-colors cursor-pointer shadow-sm"
-            >
-              Export CSV
-            </button>
+
+            <div ref={exportMenuRef} className="relative">
+              <button
+                onClick={() => setIsExportMenuOpen(!isExportMenuOpen)}
+                className="h-[38px] bg-[#011B51] hover:bg-[#022a7a] border-b-2 border-[#A51A21] text-white font-bold py-2 px-4 rounded-lg text-xs uppercase tracking-wider transition-colors cursor-pointer shadow-sm flex items-center justify-center gap-1.5 whitespace-nowrap"
+              >
+                <Download size={15} />
+                Export Report
+                <ChevronDown size={13} className={`transition-transform duration-200 ${isExportMenuOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isExportMenuOpen && (
+                <div className="absolute right-0 mt-2 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-1.5 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <button
+                    onClick={exportToPDF}
+                    className="w-full px-3 py-2 text-xs font-bold text-slate-700 hover:text-[#011B51] hover:bg-blue-50/60 rounded-lg flex items-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <FileText size={15} className="text-red-600" />
+                    PDF Document (.pdf)
+                  </button>
+                  <button
+                    onClick={exportToCSV}
+                    className="w-full px-3 py-2 text-xs font-bold text-slate-700 hover:text-[#011B51] hover:bg-emerald-50/60 rounded-lg flex items-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <Download size={15} className="text-emerald-600" />
+                    Spreadsheet (.csv)
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Manual Entry Form Panel */}
         {showManualEntry && (
           <form onSubmit={handleManualSubmit} className="mt-2 p-5 bg-blue-50/50 border border-blue-100 rounded-xl flex flex-col md:flex-row gap-4 items-end animate-in slide-in-from-top-2">
             <div className="w-full md:w-[25%]">
