@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { get, set, del } from "idb-keyval";
 import {
   registerStudentToDatabase,
@@ -27,6 +27,8 @@ interface AttendanceRecord {
   };
 }
 
+const ITEMS_PER_PAGE = 5;
+
 export default function SmartStudentPortal() {
   const [view, setView] = useState<
     "loading" | "register" | "attendance" | "recovery"
@@ -47,6 +49,10 @@ export default function SmartStudentPortal() {
 
   const [historyLogs, setHistoryLogs] = useState<AttendanceRecord[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [historySearch, setHistorySearch] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const [showDeauthModal, setShowDeauthModal] = useState(false);
 
   const [message, setMessage] = useState("");
   const [isError, setIsError] = useState(false);
@@ -382,20 +388,41 @@ export default function SmartStudentPortal() {
     }
   }
 
-  async function handleDeauthorizeDevice() {
-    if (!confirm("Are you sure you want to deauthorize this device? You will need to register or recover your account again.")) {
-      return;
-    }
-
+  async function executeDeauthorization() {
     await del("student_private_key");
     await del("student_id");
     await del("student_public_key");
 
     setRegisteredId(null);
+    setShowDeauthModal(false);
     setView("register");
     setMessage("Device deauthorized successfully.");
     setIsError(false);
   }
+
+  const processedLogs = useMemo(() => {
+    let sorted = [...historyLogs].sort(
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+
+    if (historySearch.trim()) {
+      const query = historySearch.toLowerCase();
+      sorted = sorted.filter((log) => {
+        const course = log.schedule?.course_code?.toLowerCase() || "";
+        const room = log.schedule?.lab_room?.toLowerCase() || "";
+        const section = log.schedule?.section?.toLowerCase() || "";
+        return course.includes(query) || room.includes(query) || section.includes(query);
+      });
+    }
+
+    return sorted;
+  }, [historyLogs, historySearch]);
+
+  const totalPages = Math.ceil(processedLogs.length / ITEMS_PER_PAGE) || 1;
+  const paginatedLogs = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return processedLogs.slice(start, start + ITEMS_PER_PAGE);
+  }, [processedLogs, currentPage]);
 
   if (view === "loading") {
     return (
@@ -676,6 +703,7 @@ export default function SmartStudentPortal() {
                     type="button"
                     onClick={() => {
                       setStudentTab("history");
+                      setCurrentPage(1);
                       if (registeredId) fetchHistory(registeredId);
                     }}
                     className={`flex-1 py-2.5 rounded-lg text-xs font-extrabold uppercase tracking-wider transition-all cursor-pointer ${
@@ -773,77 +801,113 @@ export default function SmartStudentPortal() {
                 </GeofenceGuard>
               ) : (
                 <div className="space-y-4 animate-in fade-in duration-300">
-                  <div className="flex justify-between items-center mb-2">
-                    <h3 className="text-sm font-extrabold text-[#011B51] uppercase tracking-wide">
-                      Recent Check-In History
-                    </h3>
-                    <button
-                      onClick={() => registeredId && fetchHistory(registeredId)}
-                      disabled={isLoadingHistory}
-                      className="text-xs font-bold text-[#011B51] hover:underline uppercase cursor-pointer"
-                    >
-                      {isLoadingHistory ? "Refreshing..." : "Refresh"}
-                    </button>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
+                    <div className="flex items-center space-x-2">
+                      <h3 className="text-sm font-extrabold text-[#011B51] uppercase tracking-wide">
+                        Check-In History
+                      </h3>
+                      <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
+                        {processedLogs.length} Total
+                      </span>
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="text"
+                        placeholder="Search course or room..."
+                        value={historySearch}
+                        onChange={(e) => {
+                          setHistorySearch(e.target.value);
+                          setCurrentPage(1);
+                        }}
+                        className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-[#011B51] transition-all w-full sm:w-48"
+                      />
+                    </div>
                   </div>
 
                   {isLoadingHistory ? (
-                    <div className="p-8 text-center text-slate-400 font-bold text-xs uppercase tracking-widest animate-pulse">
+                    <div className="p-12 text-center text-slate-400 font-bold text-xs uppercase tracking-widest animate-pulse">
                       Loading attendance records...
                     </div>
-                  ) : historyLogs.length === 0 ? (
+                  ) : processedLogs.length === 0 ? (
                     <div className="p-8 bg-slate-50 border border-slate-200 rounded-xl text-center text-slate-500 font-medium text-xs">
-                      No attendance logs recorded for this student ID.
+                      {historySearch ? "No logs match your search filter." : "No attendance logs recorded for this student ID."}
                     </div>
                   ) : (
-                    <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
-                      {historyLogs.map((log) => {
-                        const isLate = log.status === "LATE";
-                        const isManual = log.signature && log.signature.includes("OVERRIDE");
+                    <>
+                      <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1.5 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-slate-100 [&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-thumb]:rounded-full">
+                        {paginatedLogs.map((log) => {
+                          const isLate = log.status === "LATE";
+                          const isManual = log.signature && log.signature.includes("OVERRIDE");
 
-                        return (
-                          <div
-                            key={log.id}
-                            className="p-4 bg-slate-50 border border-slate-200 rounded-xl hover:border-slate-300 transition-colors"
-                          >
-                            <div className="flex justify-between items-start mb-1">
-                              <span className="font-bold text-sm text-[#011B51]">
-                                {log.schedule?.course_code || "CLASS SESSION"} (Sec {log.schedule?.section || "N/A"})
-                              </span>
-                              <span
-                                className={`px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider border ${
-                                  isLate
-                                    ? "bg-amber-50 text-amber-800 border-amber-200"
-                                    : "bg-emerald-50 text-emerald-800 border-emerald-200"
-                                }`}
-                              >
-                                {isLate ? "LATE" : "ON TIME"}
-                              </span>
+                          return (
+                            <div
+                              key={log.id}
+                              className="p-4 bg-slate-50 border border-slate-200 rounded-xl hover:border-slate-300 transition-all hover:shadow-sm"
+                            >
+                              <div className="flex justify-between items-start mb-1">
+                                <span className="font-bold text-sm text-[#011B51]">
+                                  {log.schedule?.course_code || "CLASS SESSION"} (Sec {log.schedule?.section || "N/A"})
+                                </span>
+                                <span
+                                  className={`px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider border ${
+                                    isLate
+                                      ? "bg-amber-50 text-amber-800 border-amber-200"
+                                      : "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                  }`}
+                                >
+                                  {isLate ? "LATE" : "ON TIME"}
+                                </span>
+                              </div>
+
+                              <p className="text-xs font-medium text-slate-600">
+                                Facility: {log.schedule?.lab_room || "Laboratory"}
+                              </p>
+
+                              {isManual && (
+                                <span className="inline-block mt-1 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200">
+                                  Manual Override
+                                </span>
+                              )}
+
+                              <p className="text-[11px] font-medium text-slate-400 mt-2">
+                                {new Date(log.timestamp).toLocaleString("en-US", {
+                                  weekday: "short",
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </p>
                             </div>
+                          );
+                        })}
+                      </div>
 
-                            <p className="text-xs font-medium text-slate-600">
-                              Facility: {log.schedule?.lab_room || "Laboratory"}
-                            </p>
-
-                            {isManual && (
-                              <span className="inline-block mt-1 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200">
-                                Manual Override
-                              </span>
-                            )}
-
-                            <p className="text-[11px] font-medium text-slate-400 mt-2">
-                              {new Date(log.timestamp).toLocaleString("en-US", {
-                                weekday: "short",
-                                month: "short",
-                                day: "numeric",
-                                year: "numeric",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
-                            </p>
-                          </div>
-                        );
-                      })}
-                    </div>
+                      {/* Pagination Controls */}
+                      {totalPages > 1 && (
+                        <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs font-bold text-slate-500">
+                          <button
+                            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                            disabled={currentPage === 1}
+                            className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent transition-colors cursor-pointer"
+                          >
+                            Previous
+                          </button>
+                          <span>
+                            Page {currentPage} of {totalPages}
+                          </span>
+                          <button
+                            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                            disabled={currentPage === totalPages}
+                            className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent transition-colors cursor-pointer"
+                          >
+                            Next
+                          </button>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               )}
@@ -851,7 +915,7 @@ export default function SmartStudentPortal() {
               <div className="mt-8 pt-6 border-t border-slate-100 text-center">
                 <button
                   type="button"
-                  onClick={handleDeauthorizeDevice}
+                  onClick={() => setShowDeauthModal(true)}
                   className="text-xs font-bold text-slate-400 hover:text-rose-600 uppercase tracking-wider transition-colors cursor-pointer underline underline-offset-4"
                 >
                   Deauthorize This Device
@@ -869,6 +933,56 @@ export default function SmartStudentPortal() {
           )}
         </div>
       </div>
+
+      {/* Custom Deauthorization Confirmation Modal */}
+      {showDeauthModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-100 text-center space-y-4">
+            <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                />
+              </svg>
+            </div>
+
+            <div>
+              <h3 className="text-lg font-black text-[#011B51] uppercase tracking-tight">
+                Deauthorize Device?
+              </h3>
+              <p className="text-xs text-slate-500 font-medium mt-2 leading-relaxed">
+                This action deletes your local cryptographic security keys. You will need to register or perform account recovery to check in again.
+              </p>
+            </div>
+
+            <div className="flex space-x-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowDeauthModal(false)}
+                className="flex-1 py-3 px-4 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs uppercase tracking-wider hover:bg-slate-50 transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={executeDeauthorization}
+                className="flex-1 py-3 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs uppercase tracking-wider transition-colors shadow-md cursor-pointer"
+              >
+                Deauthorize
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
