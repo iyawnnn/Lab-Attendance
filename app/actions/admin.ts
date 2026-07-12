@@ -4,9 +4,15 @@ import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
 import { logAdminAction } from "./audit";
+import { checkRateLimit } from "@/lib/ratelimit";
 
 export async function loginAdmin(userId: string, passwordString: string) {
   try {
+    const rateLimit = await checkRateLimit("login_admin", userId);
+    if (!rateLimit.success) {
+      return { success: false, message: rateLimit.message };
+    }
+
     const masterPassword = process.env.MASTER_ADMIN_PASSWORD;
     if (
       userId === "MASTER_ADMIN" &&

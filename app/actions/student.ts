@@ -3,6 +3,7 @@
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
 import { getCurrentPHTimeInMinutes, parseScheduleTime } from "./utils";
+import { checkRateLimit } from "@/lib/ratelimit";
 
 export async function getServerTime() {
   return { success: true, timestamp: new Date().toISOString() };
@@ -16,6 +17,11 @@ export async function registerStudentToDatabase(data: {
   recoveryPin: string;
 }) {
   try {
+    const rateLimit = await checkRateLimit("register", data.studentId);
+    if (!rateLimit.success) {
+      return { success: false, message: rateLimit.message };
+    }
+
     const existingStudent = await prisma.student.findUnique({
       where: { student_id: data.studentId },
     });
@@ -60,6 +66,11 @@ export async function registerStudentToDatabase(data: {
 
 export async function recoverStudentDevice(studentId: string, pin: string) {
   try {
+    const rateLimit = await checkRateLimit("recover", studentId);
+    if (!rateLimit.success) {
+      return { success: false, message: rateLimit.message };
+    }
+
     const student = await prisma.student.findUnique({
       where: { student_id: studentId },
     });
@@ -219,6 +230,11 @@ export async function submitAttendance(data: {
   roomPin: string;
 }) {
   try {
+    const rateLimit = await checkRateLimit("attendance", data.studentId);
+    if (!rateLimit.success) {
+      return { success: false, message: rateLimit.message };
+    }
+
     const student = await prisma.student.findUnique({
       where: { student_id: data.studentId },
     });

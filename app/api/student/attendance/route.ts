@@ -3,10 +3,8 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { db } from "@/lib/db";
+import { checkRateLimit } from "@/lib/ratelimit";
 
-/**
- * Verifies an ECDSA digital signature using Node.js crypto and SPKI PEM public key.
- */
 function verifyEcdsaSignature(
   message: string,
   signatureBase64: string,
@@ -15,7 +13,6 @@ function verifyEcdsaSignature(
   try {
     const verify = crypto.createVerify("SHA256");
     verify.update(message);
-
     const signatureBuffer = Buffer.from(signatureBase64, "base64");
 
     return verify.verify(
@@ -37,7 +34,6 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { studentId, labRoom, timestamp, signature, roomPin } = body;
 
-    // 1. Validate payload parameters
     if (!studentId || !labRoom || !timestamp || !signature || !roomPin) {
       return NextResponse.json(
         { success: false, message: "Missing required attendance parameters." },
@@ -45,7 +41,14 @@ export async function POST(req: Request) {
       );
     }
 
-    // 2. Query Student Record
+    const rateLimit = await checkRateLimit("attendance", studentId);
+    if (!rateLimit.success) {
+      return NextResponse.json(
+        { success: false, message: rateLimit.message },
+        { status: 429 }
+      );
+    }
+
     const student = await db.student.findUnique({
       where: { student_id: studentId },
     });
@@ -67,19 +70,17 @@ export async function POST(req: Request) {
       );
     }
 
-    // 3. Time drift validation (60-second limit)
     const clientTime = new Date(timestamp).getTime();
     const serverTime = Date.now();
     const allowedDrift = parseInt(process.env.ALLOWED_TIME_DRIFT_MS || "60000", 10);
 
     if (isNaN(clientTime) || Math.abs(serverTime - clientTime) > allowedDrift) {
       return NextResponse.json(
-        { success: false, message: "Request rejected: Clock desynchronization detected. Check your phone time settings." },
+        { success: false, message: "Request rejected: Clock desynchronization detected." },
         { status: 400 }
       );
     }
 
-    // 4. Verify Digital Signature
     const messageToVerify = `${studentId}-${labRoom}-${timestamp}`;
     const isValid = verifyEcdsaSignature(
       messageToVerify,
@@ -94,7 +95,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // 5. Query Active Lab Session & PIN
     const matchedSchedule = await db.schedule.findFirst({
       where: {
         lab_room: labRoom,
@@ -110,7 +110,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // 6. Check Duplicate Attendance (12-hour window)
     const twelveHoursAgo = new Date(Date.now() - 12 * 60 * 60 * 1000);
     const existingLog = await db.attendanceLog.findFirst({
       where: {
@@ -127,7 +126,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // 7. Record Log in Database
     await db.attendanceLog.create({
       data: {
         student_id: studentId,
@@ -141,7 +139,6 @@ export async function POST(req: Request) {
       success: true,
       message: `Attendance securely recorded for ${labRoom}!`,
     });
-
   } catch (error: any) {
     console.error("Attendance API Error:", error);
     return NextResponse.json(

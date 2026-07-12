@@ -4,9 +4,15 @@ import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
 import { logAdminAction } from "./audit";
+import { checkRateLimit } from "@/lib/ratelimit";
 
 export async function loginTeacher(userId: string, passwordString: string) {
   try {
+    const rateLimit = await checkRateLimit("login_teacher", userId);
+    if (!rateLimit.success) {
+      return { success: false, message: rateLimit.message };
+    }
+
     const user = await prisma.user.findUnique({ where: { user_id: userId } });
     if (!user) return { success: false, message: "Invalid credentials." };
     if (user.role !== "TEACHER" && user.role !== "ADMIN")

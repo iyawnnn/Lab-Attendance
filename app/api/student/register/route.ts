@@ -3,6 +3,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import bcrypt from "bcryptjs";
+import { checkRateLimit } from "@/lib/ratelimit";
 
 export async function POST(req: Request) {
   try {
@@ -15,6 +16,14 @@ export async function POST(req: Request) {
       );
     }
 
+    const rateLimit = await checkRateLimit("register", studentId);
+    if (!rateLimit.success) {
+      return NextResponse.json(
+        { success: false, message: rateLimit.message },
+        { status: 429 }
+      );
+    }
+
     const existingStudent = await db.student.findUnique({
       where: { student_id: studentId },
     });
@@ -23,7 +32,6 @@ export async function POST(req: Request) {
     const hashedPin = await bcrypt.hash(recoveryPin, salt);
 
     if (existingStudent) {
-      // Allow registration if the device key was wiped via revocation
       if (!existingStudent.public_key || existingStudent.public_key === "") {
         const updatedStudent = await db.student.update({
           where: { student_id: studentId },
@@ -40,7 +48,6 @@ export async function POST(req: Request) {
         });
       }
 
-      // Block registration only if an active device key exists
       return NextResponse.json(
         {
           success: false,
@@ -50,7 +57,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // Register brand new student record
     const newStudent = await db.student.create({
       data: {
         student_id: studentId,

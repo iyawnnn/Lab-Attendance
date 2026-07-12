@@ -3,6 +3,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import bcrypt from "bcryptjs";
+import { checkRateLimit } from "@/lib/ratelimit";
 
 export async function POST(request: Request) {
   try {
@@ -13,6 +14,14 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { success: false, message: "Missing required recovery parameters." },
         { status: 400 }
+      );
+    }
+
+    const rateLimit = await checkRateLimit("recover", studentId);
+    if (!rateLimit.success) {
+      return NextResponse.json(
+        { success: false, message: rateLimit.message },
+        { status: 429 }
       );
     }
 
@@ -46,7 +55,6 @@ export async function POST(request: Request) {
       public_key: newPublicKey ? newPublicKey : "",
     };
 
-    // Hash and update to the new PIN if provided
     if (newPin && newPin.length === 4) {
       const salt = await bcrypt.genSalt(10);
       updateData.recovery_pin = await bcrypt.hash(newPin, salt);
