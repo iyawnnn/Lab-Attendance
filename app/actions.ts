@@ -2,6 +2,7 @@
 
 import { PrismaClient } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { cookies } from "next/headers";
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
 const prisma = globalForPrisma.prisma || new PrismaClient();
@@ -401,11 +402,28 @@ export async function loginAdmin(userId: string, passwordString: string) {
     };
   if (passwordString !== masterPassword)
     return { success: false, message: "Invalid administrative credentials." };
+
+  // Store HTTP-only server cookie
+  const cookieStore = await cookies();
+  cookieStore.set("admin_session", "MASTER_ADMIN", {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: 60 * 60 * 12,
+    path: "/",
+  });
+
   return {
     success: true,
     adminId: "MASTER_ADMIN",
     name: "System Administrator",
   };
+}
+
+export async function logoutAdmin() {
+  const cookieStore = await cookies();
+  cookieStore.delete("admin_session");
+  return { success: true };
 }
 
 export async function fetchAdminData() {
@@ -628,6 +646,17 @@ export async function loginTeacher(userId: string, passwordString: string) {
       return { success: false, message: "Unauthorized access level." };
     const isMatch = await bcrypt.compare(passwordString, user.password);
     if (!isMatch) return { success: false, message: "Invalid credentials." };
+
+    // Store HTTP-only server cookie
+    const cookieStore = await cookies();
+    cookieStore.set("teacher_session", user.user_id, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 12,
+      path: "/",
+    });
+
     return {
       success: true,
       message: "Authentication successful.",
@@ -637,6 +666,12 @@ export async function loginTeacher(userId: string, passwordString: string) {
   } catch (error) {
     return { success: false, message: "Server error during authentication." };
   }
+}
+
+export async function logoutTeacher() {
+  const cookieStore = await cookies();
+  cookieStore.delete("teacher_session");
+  return { success: true };
 }
 
 export async function assignTeacherToMultipleSchedules(

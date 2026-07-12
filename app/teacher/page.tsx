@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { get, set, del } from "idb-keyval";
+import { logoutTeacher } from "../actions";
 import { loginTeacher, getTeacherDashboardData, changeTeacherPassword } from "../actions";
 import SessionTab from "./components/SessionTab";
 import SchedulesTab from "./components/SchedulesTab";
@@ -12,13 +13,13 @@ export default function TeacherDashboard() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [teacherIdInput, setTeacherIdInput] = useState<string>("");
   const [password, setPassword] = useState<string>("");
-  
+
   const [activeTeacherId, setActiveTeacherId] = useState<string>("");
   const [activeTeacherName, setActiveTeacherName] = useState<string>("");
-  
+
   const [schedules, setSchedules] = useState<any[]>([]);
   const [logs, setLogs] = useState<any[]>([]);
-  
+
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [message, setMessage] = useState<string>("");
   const [messageType, setMessageType] = useState<"error" | "success">("error");
@@ -37,7 +38,7 @@ export default function TeacherDashboard() {
       try {
         const storedId = await get("authenticated_teacher_id");
         const storedName = await get("authenticated_teacher_name");
-        
+
         if (storedId) {
           setActiveTeacherId(storedId);
           if (storedName) setActiveTeacherName(storedName);
@@ -57,14 +58,14 @@ export default function TeacherDashboard() {
     const result = await getTeacherDashboardData(userId);
     if (result.success) {
       setSchedules(result.schedules || []);
-      
-      const flatLogs = (result.schedules || []).flatMap((sched: any) => 
+
+      const flatLogs = (result.schedules || []).flatMap((sched: any) =>
         sched.attendances.map((att: any) => ({
           ...att,
           schedule: sched
         }))
       ).sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-      
+
       setLogs(flatLogs);
     }
   }
@@ -98,6 +99,7 @@ export default function TeacherDashboard() {
   }
 
   async function handleLogout() {
+    await logoutTeacher();
     await del("authenticated_teacher_id");
     await del("authenticated_teacher_name");
     setIsAuthenticated(false);
@@ -123,9 +125,9 @@ export default function TeacherDashboard() {
     setSettingsMessage("");
 
     const response = await changeTeacherPassword(activeTeacherId, currentPassword, newPassword);
-    
+
     setSettingsMessage(response.message);
-    
+
     if (response.success) {
       setTimeout(() => {
         setIsSettingsOpen(false);
@@ -135,7 +137,7 @@ export default function TeacherDashboard() {
         setSettingsMessage("");
       }, 2000);
     }
-    
+
     setIsSettingsProcessing(false);
   }
 
@@ -159,7 +161,7 @@ export default function TeacherDashboard() {
             <div className="flex flex-row lg:flex-col items-center lg:items-start space-x-4 lg:space-x-0">
               <img src="/ua-logo.png" alt="UA Logo" className="w-12 h-12 sm:w-16 lg:w-20 object-contain lg:mb-8 drop-shadow-xl shrink-0" />
               <h1 className="text-2xl sm:text-4xl lg:text-5xl xl:text-6xl font-black text-white tracking-tight leading-tight uppercase drop-shadow-2xl">
-                Instructor <br className="hidden lg:block"/>
+                Instructor <br className="hidden lg:block" />
                 <span className="text-[#FED702]">Portal</span>
               </h1>
             </div>
@@ -187,30 +189,30 @@ export default function TeacherDashboard() {
               <form onSubmit={handleAuth} className="space-y-4 lg:space-y-6">
                 <div>
                   <label className="block text-[10px] sm:text-xs font-bold text-[#011B51] uppercase tracking-wide mb-2 ml-1">Instructor ID</label>
-                  <input 
-                    type="text" 
-                    placeholder="e.g. TCH-001" 
-                    className="w-full px-5 py-4 rounded-xl bg-slate-50 border border-slate-200 outline-none text-sm font-medium focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all shadow-sm" 
-                    value={teacherIdInput} 
-                    onChange={(e) => setTeacherIdInput(e.target.value)} 
-                    required 
+                  <input
+                    type="text"
+                    placeholder="e.g. TCH-001"
+                    className="w-full px-5 py-4 rounded-xl bg-slate-50 border border-slate-200 outline-none text-sm font-medium focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all shadow-sm"
+                    value={teacherIdInput}
+                    onChange={(e) => setTeacherIdInput(e.target.value)}
+                    required
                   />
                 </div>
                 <div>
                   <label className="block text-[10px] sm:text-xs font-bold text-[#011B51] uppercase tracking-wide mb-2 ml-1">Password</label>
-                  <input 
-                    type="password" 
-                    placeholder="••••••••" 
-                    className="w-full px-5 py-4 rounded-xl bg-slate-50 border border-slate-200 outline-none text-sm font-medium focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all shadow-sm" 
-                    value={password} 
-                    onChange={(e) => setPassword(e.target.value)} 
-                    required 
+                  <input
+                    type="password"
+                    placeholder="••••••••"
+                    className="w-full px-5 py-4 rounded-xl bg-slate-50 border border-slate-200 outline-none text-sm font-medium focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all shadow-sm"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
                   />
                 </div>
 
-                <button 
-                  type="submit" 
-                  disabled={isLoading} 
+                <button
+                  type="submit"
+                  disabled={isLoading}
                   className="w-full text-white font-bold py-4 rounded-xl mt-8 transition-all bg-[#011B51] hover:bg-[#022a7a] border-b-4 border-[#A51A21] disabled:opacity-70 text-xs uppercase tracking-wider cursor-pointer shadow-md"
                 >
                   {isLoading ? "Authenticating..." : "Secure Login"}
@@ -240,23 +242,23 @@ export default function TeacherDashboard() {
               <p className="text-[#FED702] text-xs font-bold uppercase tracking-widest mt-1">ID: {activeTeacherId}</p>
             </div>
           </div>
-          
+
           <div className="flex items-center space-x-3 mt-4 sm:mt-0">
-            <button 
-              onClick={() => setIsSettingsOpen(true)} 
+            <button
+              onClick={() => setIsSettingsOpen(true)}
               className="text-xs font-bold bg-white/10 hover:bg-white/20 text-white uppercase tracking-wider px-5 py-2.5 rounded-lg shadow-sm transition-colors border border-transparent cursor-pointer"
             >
               Security Settings
             </button>
-            <button 
-              onClick={handleLogout} 
+            <button
+              onClick={handleLogout}
               className="text-xs font-bold bg-[#A51A21] hover:bg-[#851319] text-white uppercase tracking-wider px-5 py-2.5 rounded-lg shadow-sm transition-colors border border-transparent cursor-pointer"
             >
               Log Out
             </button>
           </div>
         </div>
-        
+
         <div className="max-w-7xl mx-auto mt-8 flex space-x-6 sm:space-x-8 overflow-x-auto no-scrollbar">
           <button onClick={() => setActiveTab("session")} className={`pb-3 text-xs sm:text-sm font-bold uppercase tracking-wider border-b-2 transition-colors ${activeTab === "session" ? "border-white text-white" : "border-transparent text-white/50 hover:text-white/80 cursor-pointer whitespace-nowrap"}`}>Active Session</button>
           <button onClick={() => setActiveTab("schedules")} className={`pb-3 text-xs sm:text-sm font-bold uppercase tracking-wider border-b-2 transition-colors ${activeTab === "schedules" ? "border-white text-white" : "border-transparent text-white/50 hover:text-white/80 cursor-pointer whitespace-nowrap"}`}>My Classes</button>
@@ -284,20 +286,20 @@ export default function TeacherDashboard() {
                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Account Security</h3>
                 <h2 className="text-xl font-black text-[#011B51] uppercase tracking-tight">Change Password</h2>
               </div>
-              <button 
+              <button
                 onClick={() => {
                   setIsSettingsOpen(false);
                   setSettingsMessage("");
                   setCurrentPassword("");
                   setNewPassword("");
                   setConfirmPassword("");
-                }} 
+                }}
                 className="text-slate-400 hover:text-[#011B51] font-black text-2xl cursor-pointer"
               >
                 &times;
               </button>
             </div>
-            
+
             <div className="p-6">
               <form onSubmit={handlePasswordChange} className="space-y-4">
                 <div>

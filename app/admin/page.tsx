@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { get, set, del } from "idb-keyval";
+import { logoutAdmin } from "../actions";
 import {
   getAdminData,
   resetStudentDevice,
@@ -92,7 +93,8 @@ export default function AdminDashboard() {
   }
 
   async function handleLogout() {
-    await del("authenticated_admin_id"); // Clear session
+    await logoutAdmin();
+    await del("authenticated_admin_id");
     setIsAuthenticated(false);
     setPassword("");
     setAdminId("");
