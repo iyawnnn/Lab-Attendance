@@ -4,12 +4,12 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { get, set, del } from "idb-keyval";
 import {
   registerStudentToDatabase,
-  getLabRooms,
-  submitAttendance,
   recoverStudentDevice,
   checkRevokedStatus,
+  getLabRooms,
+  submitAttendance,
   getServerTime,
-} from "../actions";
+} from "@/app/actions/student";
 import GeofenceGuard from "./components/GeofenceGuard";
 
 interface AttendanceRecord {

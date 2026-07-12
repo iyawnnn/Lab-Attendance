@@ -3,7 +3,12 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { FaEdit, FaTrash, FaDoorOpen, FaUserTie } from "react-icons/fa";
 import { Search, ChevronDown, Check, X } from "lucide-react";
-import { createSchedule, updateSchedule, deleteSchedule, assignTeacherToSchedule } from "../../actions";
+import {
+  createSchedule,
+  updateSchedule,
+  deleteSchedule,
+  assignTeacherToSchedule,
+} from "@/app/actions/schedule";
 import { Schedule } from "../types";
 
 // --- CUSTOM UI COMPONENT: Filter Dropdown ---

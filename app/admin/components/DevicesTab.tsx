@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Student } from "../types";
+import { resetStudentDevice } from "@/app/actions/admin";
 
 interface DevicesTabProps {
   students: Student[];

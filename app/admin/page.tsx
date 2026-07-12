@@ -2,13 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { get, set, del } from "idb-keyval";
-import { logoutAdmin } from "../actions";
 import {
   getAdminData,
   resetStudentDevice,
   loginAdmin,
   fetchAdminData,
-} from "../actions";
+  logoutAdmin,
+} from "@/app/actions/admin";
 import { AttendanceLog, Student, Schedule, AuditLog } from "./types";
 import AttendanceTab from "./components/AttendanceTab";
 import SchedulesTab from "./components/SchedulesTab";

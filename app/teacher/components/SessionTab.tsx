@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Maximize, Minimize } from "lucide-react";
-import { generateSessionPin } from "../../actions";
+import { generateSessionPin } from "@/app/actions/teacher";
 
 interface Schedule {
   id: number | string;
