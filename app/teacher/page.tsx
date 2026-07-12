@@ -2,8 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { get, set, del } from "idb-keyval";
-import { logoutTeacher } from "../actions";
-import { loginTeacher, getTeacherDashboardData, changeTeacherPassword } from "../actions";
+import {
+  loginTeacher,
+  logoutTeacher,
+  getTeacherDashboardData,
+  changeTeacherPassword,
+} from "@/app/actions/teacher";
 import SessionTab from "./components/SessionTab";
 import SchedulesTab from "./components/SchedulesTab";
 import AttendanceTab from "./components/AttendanceTab";

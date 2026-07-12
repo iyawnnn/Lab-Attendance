@@ -1,7 +1,3 @@
-export async function getServerTime() {
-  return { success: true, timestamp: new Date().toISOString() };
-}
-
 export function getCurrentPHTimeInMinutes(): number {
   const timeZone = process.env.NEXT_PUBLIC_APP_TIMEZONE || "Asia/Manila";
   const phTimeFormatter = new Intl.DateTimeFormat("en-US", {

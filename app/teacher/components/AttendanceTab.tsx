@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { manuallyAdmitStudent } from "../../actions";
+import { manuallyAdmitStudent } from "@/app/actions/teacher";
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {

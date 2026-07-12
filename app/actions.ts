@@ -1,4 +1,3 @@
-// app/actions.ts
 export {
   loginAdmin,
   logoutAdmin,
@@ -34,8 +33,7 @@ export {
   checkRevokedStatus,
   getLabRooms,
   submitAttendance,
+  getServerTime,
 } from "./actions/student";
 
 export { logAdminAction } from "./actions/audit";
-
-export { getServerTime } from "./actions/utils";

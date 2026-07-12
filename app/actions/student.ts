@@ -4,6 +4,10 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
 import { getCurrentPHTimeInMinutes, parseScheduleTime } from "./utils";
 
+export async function getServerTime() {
+  return { success: true, timestamp: new Date().toISOString() };
+}
+
 export async function registerStudentToDatabase(data: {
   studentId: string;
   firstName: string;

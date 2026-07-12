@@ -16,12 +16,11 @@ import {
   SlidersHorizontal,
   RotateCcw,
 } from "lucide-react";
+import { createStaffAccount, deleteTeacherAccount } from "@/app/actions/admin";
 import {
-  createStaffAccount,
-  deleteTeacherAccount,
   assignTeacherToMultipleSchedules,
   removeTeacherFromSchedule,
-} from "../../actions";
+} from "@/app/actions/schedule";
 import { Schedule } from "../types";
 
 interface StaffUser {
