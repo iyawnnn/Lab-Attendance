@@ -85,10 +85,10 @@ export default function SmartStudentPortal() {
 
       if (privateKey && storedId) {
         const statusCheck = await checkRevokedStatus(storedId);
-        
-        const isKeyMismatched = 
-          statusCheck.currentPublicKey && 
-          localPublicKey && 
+
+        const isKeyMismatched =
+          statusCheck.currentPublicKey &&
+          localPublicKey &&
           statusCheck.currentPublicKey !== localPublicKey;
 
         if (statusCheck.isRevoked || isKeyMismatched) {
@@ -121,9 +121,9 @@ export default function SmartStudentPortal() {
         const statusRes = await checkRevokedStatus(registeredId);
         const localPublicKey = await get("student_public_key");
 
-        const isKeyMismatched = 
-          statusRes.currentPublicKey && 
-          localPublicKey && 
+        const isKeyMismatched =
+          statusRes.currentPublicKey &&
+          localPublicKey &&
           statusRes.currentPublicKey !== localPublicKey;
 
         if (statusRes.isRevoked || isKeyMismatched) {
@@ -184,8 +184,10 @@ export default function SmartStudentPortal() {
 
     if (idToSearch.length >= 4) {
       const response = await checkRevokedStatus(idToSearch);
-      if (response.isRevoked) {
-        setFirstName(response.firstName || "");
+
+      // FIX: Only lock the input fields if the account is revoked AND a valid name was returned
+      if (response.isRevoked && response.firstName) {
+        setFirstName(response.firstName);
         setLastName(response.lastName || "");
         setIsNameLocked(true);
         setMessage(
@@ -193,6 +195,7 @@ export default function SmartStudentPortal() {
         );
         setIsError(false);
       } else {
+        // If the student doesn't exist yet, keep the fields unlocked for new registration
         setIsNameLocked(false);
       }
     }
@@ -325,7 +328,7 @@ export default function SmartStudentPortal() {
         setIsError(true);
         setMessage(response.message);
 
-        const isSecurityError = 
+        const isSecurityError =
           response.message.includes("Student not found") ||
           response.message.includes("DEVICE_REVOKED") ||
           response.message.includes("verification failed") ||
@@ -691,11 +694,10 @@ export default function SmartStudentPortal() {
                   <button
                     type="button"
                     onClick={() => setStudentTab("checkin")}
-                    className={`flex-1 py-2.5 rounded-lg text-xs font-extrabold uppercase tracking-wider transition-all cursor-pointer ${
-                      studentTab === "checkin"
+                    className={`flex-1 py-2.5 rounded-lg text-xs font-extrabold uppercase tracking-wider transition-all cursor-pointer ${studentTab === "checkin"
                         ? "bg-[#011B51] text-white shadow-md"
                         : "text-slate-500 hover:text-[#011B51]"
-                    }`}
+                      }`}
                   >
                     Log Attendance
                   </button>
@@ -706,11 +708,10 @@ export default function SmartStudentPortal() {
                       setCurrentPage(1);
                       if (registeredId) fetchHistory(registeredId);
                     }}
-                    className={`flex-1 py-2.5 rounded-lg text-xs font-extrabold uppercase tracking-wider transition-all cursor-pointer ${
-                      studentTab === "history"
+                    className={`flex-1 py-2.5 rounded-lg text-xs font-extrabold uppercase tracking-wider transition-all cursor-pointer ${studentTab === "history"
                         ? "bg-[#011B51] text-white shadow-md"
                         : "text-slate-500 hover:text-[#011B51]"
-                    }`}
+                      }`}
                   >
                     My History
                   </button>
@@ -850,11 +851,10 @@ export default function SmartStudentPortal() {
                                   {log.schedule?.course_code || "CLASS SESSION"} (Sec {log.schedule?.section || "N/A"})
                                 </span>
                                 <span
-                                  className={`px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider border ${
-                                    isLate
+                                  className={`px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider border ${isLate
                                       ? "bg-amber-50 text-amber-800 border-amber-200"
                                       : "bg-emerald-50 text-emerald-800 border-emerald-200"
-                                  }`}
+                                    }`}
                                 >
                                   {isLate ? "LATE" : "ON TIME"}
                                 </span>
