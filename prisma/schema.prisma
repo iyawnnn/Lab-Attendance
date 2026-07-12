@@ -62,3 +62,12 @@ model AttendanceLog {
 
   @@unique([student_id, schedule_id]) 
 }
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  action    String
+  actor     String   @default("MASTER_ADMIN")
+  details   String
+  target    String?
+  timestamp DateTime @default(now())
+}

@@ -9,11 +9,12 @@ import {
   loginAdmin,
   fetchAdminData,
 } from "../actions";
-import { AttendanceLog, Student, Schedule } from "./types";
+import { AttendanceLog, Student, Schedule, AuditLog } from "./types";
 import AttendanceTab from "./components/AttendanceTab";
 import SchedulesTab from "./components/SchedulesTab";
 import DevicesTab from "./components/DevicesTab";
 import TeachersTab from "./components/TeachersTab";
+import AuditLogsTab from "./components/AuditLogsTab";
 
 export default function AdminDashboard() {
   const [isInitializing, setIsInitializing] = useState<boolean>(true);
@@ -25,16 +26,16 @@ export default function AdminDashboard() {
   const [students, setStudents] = useState<Student[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [teachers, setTeachers] = useState<any[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [message, setMessage] = useState<string>("");
   const [messageType, setMessageType] = useState<"error" | "success">("error");
 
   const [activeTab, setActiveTab] = useState<
-    "attendance" | "schedules" | "devices" | "staff"
+    "attendance" | "schedules" | "devices" | "staff" | "audit"
   >("attendance");
 
-  // Check for existing session on page load
   useEffect(() => {
     async function initialize() {
       try {
@@ -58,12 +59,16 @@ export default function AdminDashboard() {
     if (data.success) {
       setLogs(data.logs || []);
       setStudents(data.students || []);
+      setAuditLogs(data.auditLogs || []);
     }
 
     const relationalData = await fetchAdminData();
     if (relationalData.success) {
       setTeachers(relationalData.teachers || []);
       setSchedules(relationalData.schedules || []);
+      if (relationalData.auditLogs) {
+        setAuditLogs(relationalData.auditLogs);
+      }
     }
   }
 
@@ -76,7 +81,7 @@ export default function AdminDashboard() {
       const response = await loginAdmin(adminId, password);
 
       if (response.success) {
-        await set("authenticated_admin_id", adminId); // Save session
+        await set("authenticated_admin_id", adminId);
         setIsAuthenticated(true);
         fetchDashboardData();
       } else {
@@ -118,7 +123,6 @@ export default function AdminDashboard() {
     }
   }
 
-  // Prevent the login screen from flashing during initial load
   if (isInitializing) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -130,7 +134,6 @@ export default function AdminDashboard() {
   if (!isAuthenticated) {
     return (
       <main className="min-h-screen w-full flex flex-col lg:flex-row bg-white overflow-hidden font-sans">
-        {/* LEFT PANEL: BRANDING */}
         <div className="relative w-full lg:w-[40%] min-h-[25vh] lg:min-h-screen bg-[#011B51] flex flex-col justify-center lg:justify-between p-6 sm:p-10 lg:p-14 overflow-hidden shadow-md lg:shadow-2xl z-10 border-b-4 lg:border-b-0 lg:border-r-4 border-[#A51A21] shrink-0">
           <div className="absolute inset-0 z-0 bg-[#011B51]">
             <img
@@ -156,7 +159,6 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* RIGHT PANEL: SECRET ENTRY */}
         <div className="w-full lg:w-[60%] flex-1 flex items-center justify-center p-6 sm:p-10 lg:p-16 bg-white relative">
           <a
             href="/"
@@ -280,6 +282,12 @@ export default function AdminDashboard() {
           >
             Devices
           </button>
+          <button
+            onClick={() => setActiveTab("audit")}
+            className={`pb-3 text-xs sm:text-sm font-bold uppercase tracking-wider border-b-2 transition-colors ${activeTab === "audit" ? "border-white text-white" : "border-transparent text-white/50 hover:text-white/80 cursor-pointer whitespace-nowrap"}`}
+          >
+            Audit Logs
+          </button>
         </div>
       </header>
 
@@ -307,6 +315,9 @@ export default function AdminDashboard() {
             onResetDevice={handleResetDevice}
             isLoading={isLoading}
           />
+        </div>
+        <div className={activeTab === "audit" ? "block" : "hidden"}>
+          <AuditLogsTab auditLogs={auditLogs} />
         </div>
       </div>
     </main>

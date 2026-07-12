@@ -30,3 +30,12 @@ export interface AttendanceLog {
   student: Student;
   schedule: Schedule;
 }
+
+export interface AuditLog {
+  id: number;
+  action: string;
+  actor: string;
+  details: string;
+  target?: string | null;
+  timestamp: Date | string;
+}

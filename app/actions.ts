@@ -11,6 +11,26 @@ if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
 }
 
+export async function logAdminAction(
+  action: string,
+  details: string,
+  target?: string,
+  actor: string = "MASTER_ADMIN"
+) {
+  try {
+    await prisma.auditLog.create({
+      data: {
+        action,
+        actor,
+        details,
+        target: target || null, 
+      },
+    });
+  } catch (error) {
+    console.error("Failed to write administrative audit log:", error);
+  }
+}
+
 export async function registerStudentToDatabase(data: {
   studentId: string;
   firstName: string;
@@ -31,7 +51,7 @@ export async function registerStudentToDatabase(data: {
           where: { student_id: data.studentId },
           data: {
             public_key: data.publicKey,
-            recovery_pin: hashedPin, // Update PIN upon registering new device
+            recovery_pin: hashedPin,
           },
         });
         return {
@@ -81,7 +101,6 @@ export async function recoverStudentDevice(studentId: string, pin: string) {
     if (!isPinValid)
       return { success: false, message: "Incorrect Recovery PIN." };
 
-    // Clear ONLY the public key to revoke device access while preserving the PIN
     await prisma.student.update({
       where: { student_id: studentId },
       data: { public_key: "" },
@@ -372,9 +391,12 @@ export async function getAdminData() {
     const schedules = await prisma.schedule.findMany({
       orderBy: [{ lab_room: "asc" }, { date: "asc" }],
     });
-    return { success: true, logs, students, schedules };
+    const auditLogs = await prisma.auditLog.findMany({
+      orderBy: { timestamp: "desc" },
+    });
+    return { success: true, logs, students, schedules, auditLogs };
   } catch (error) {
-    return { success: false, logs: [], students: [], schedules: [] };
+    return { success: false, logs: [], students: [], schedules: [], auditLogs: [] };
   }
 }
 
@@ -384,6 +406,11 @@ export async function resetStudentDevice(studentId: string) {
       where: { student_id: studentId },
       data: { public_key: "", recovery_pin: "" },
     });
+    await logAdminAction(
+      "RESET_STUDENT_DEVICE",
+      `Revoked hardware key and security PIN registration for student ID ${studentId}.`,
+      studentId
+    );
     return {
       success: true,
       message: "Student device access revoked successfully.",
@@ -394,31 +421,112 @@ export async function resetStudentDevice(studentId: string) {
 }
 
 export async function loginAdmin(userId: string, passwordString: string) {
-  const masterPassword = process.env.MASTER_ADMIN_PASSWORD;
-  if (!masterPassword)
+  try {
+    // 1. Fallback master administrator authentication from environment variables
+    const masterPassword = process.env.MASTER_ADMIN_PASSWORD;
+    if (userId === "MASTER_ADMIN" && masterPassword && passwordString === masterPassword) {
+      const cookieStore = await cookies();
+      cookieStore.set("admin_session", "MASTER_ADMIN", {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        maxAge: 60 * 60 * 12,
+        path: "/",
+      });
+
+      await logAdminAction(
+        "ADMIN_LOGIN",
+        "Master system administrator logged into control panel.",
+        "MASTER_ADMIN",
+        "MASTER_ADMIN"
+      );
+
+      return {
+        success: true,
+        adminId: "MASTER_ADMIN",
+        name: "Master Administrator",
+      };
+    }
+
+    // 2. Database administrator authentication from User table
+    const user = await prisma.user.findFirst({
+      where: { user_id: userId, role: "ADMIN" },
+    });
+
+    if (!user) {
+      return { success: false, message: "Invalid administrative credentials." };
+    }
+
+    const isMatch = await bcrypt.compare(passwordString, user.password);
+    if (!isMatch) {
+      return { success: false, message: "Invalid administrative credentials." };
+    }
+
+    const cookieStore = await cookies();
+    cookieStore.set("admin_session", user.user_id, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 60 * 60 * 12,
+      path: "/",
+    });
+
+    await logAdminAction(
+      "ADMIN_LOGIN",
+      `Administrator ${user.name} logged into control panel.`,
+      user.user_id,
+      user.user_id
+    );
+
     return {
-      success: false,
-      message: "Server misconfiguration: Master password not set.",
+      success: true,
+      adminId: user.user_id,
+      name: user.name,
     };
-  if (passwordString !== masterPassword)
-    return { success: false, message: "Invalid administrative credentials." };
-
-  // Store HTTP-only server cookie
-  const cookieStore = await cookies();
-  cookieStore.set("admin_session", "MASTER_ADMIN", {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    maxAge: 60 * 60 * 12,
-    path: "/",
-  });
-
-  return {
-    success: true,
-    adminId: "MASTER_ADMIN",
-    name: "System Administrator",
-  };
+  } catch (error) {
+    return { success: false, message: "Server error during administrative authentication." };
+  }
 }
+
+export async function createAdminAccount(
+  userId: string,
+  name: string,
+  passwordString: string
+) {
+  try {
+    const existingUser = await prisma.user.findUnique({
+      where: { user_id: userId },
+    });
+    if (existingUser) {
+      return { success: false, message: "This User ID is already registered." };
+    }
+
+    const hashedPassword = await bcrypt.hash(passwordString, 10);
+    const newUser = await prisma.user.create({
+      data: {
+        user_id: userId,
+        name: name,
+        password: hashedPassword,
+        role: "ADMIN",
+      },
+    });
+
+    await logAdminAction(
+      "CREATE_ADMIN_ACCOUNT",
+      `Created administrator account for ${name} (User ID: ${userId}).`,
+      userId
+    );
+
+    return {
+      success: true,
+      message: "Administrative account successfully created.",
+      adminDbId: newUser.id,
+    };
+  } catch (error) {
+    return { success: false, message: "Failed to create administrator account." };
+  }
+}
+
 
 export async function logoutAdmin() {
   const cookieStore = await cookies();
@@ -440,39 +548,52 @@ export async function fetchAdminData() {
       include: { student: true, schedule: true },
       orderBy: { timestamp: "desc" },
     });
-    return { success: true, teachers, schedules, logs };
+    const auditLogs = await prisma.auditLog.findMany({
+      orderBy: { timestamp: "desc" },
+    });
+    return { success: true, teachers, schedules, logs, auditLogs };
   } catch (error) {
-    return { success: false, teachers: [], schedules: [], logs: [] };
+    return { success: false, teachers: [], schedules: [], logs: [], auditLogs: [] };
   }
 }
 
-export async function createTeacherAccount(
+export async function createStaffAccount(
   userId: string,
   name: string,
   passwordString: string,
+  role: "ADMIN" | "TEACHER"
 ) {
   try {
     const existingUser = await prisma.user.findUnique({
       where: { user_id: userId },
     });
-    if (existingUser)
+    if (existingUser) {
       return { success: false, message: "This User ID is already registered." };
+    }
+
     const hashedPassword = await bcrypt.hash(passwordString, 10);
     const newUser = await prisma.user.create({
       data: {
         user_id: userId,
         name: name,
         password: hashedPassword,
-        role: "TEACHER",
+        role: role,
       },
     });
+
+    await logAdminAction(
+      role === "ADMIN" ? "CREATE_ADMIN_ACCOUNT" : "CREATE_TEACHER_ACCOUNT",
+      `Created ${role.toLowerCase()} account for ${name} (User ID: ${userId}).`,
+      userId
+    );
+
     return {
       success: true,
-      message: "Teacher account successfully created.",
-      teacherId: newUser.id,
+      message: `${role === "ADMIN" ? "Administrator" : "Teacher"} account successfully created.`,
+      staffId: newUser.id,
     };
   } catch (error) {
-    return { success: false, message: "Failed to create teacher account." };
+    return { success: false, message: "Failed to create staff account." };
   }
 }
 
@@ -493,6 +614,11 @@ export async function createSchedule(data: {
         section: data.section,
       },
     });
+    await logAdminAction(
+      "CREATE_SCHEDULE",
+      `Created schedule entry for course ${data.course_code} (Sec ${data.section}) in ${data.lab_room}.`,
+      data.course_code
+    );
     return { success: true, message: "Class schedule created successfully." };
   } catch (error) {
     return { success: false, message: "Failed to create the schedule." };
@@ -520,6 +646,11 @@ export async function updateSchedule(
         section: data.section,
       },
     });
+    await logAdminAction(
+      "UPDATE_SCHEDULE",
+      `Updated parameters for schedule ID ${id} (${data.course_code}, Sec ${data.section}, ${data.lab_room}).`,
+      String(id)
+    );
     return { success: true, message: "Class schedule updated successfully." };
   } catch (error) {
     return { success: false, message: "Failed to update the schedule." };
@@ -529,6 +660,11 @@ export async function updateSchedule(
 export async function deleteSchedule(id: number) {
   try {
     await prisma.schedule.delete({ where: { id: id } });
+    await logAdminAction(
+      "DELETE_SCHEDULE",
+      `Deleted class schedule entry ID ${id}.`,
+      String(id)
+    );
     return { success: true, message: "Class schedule deleted successfully." };
   } catch (error) {
     return { success: false, message: "Failed to delete the schedule." };
@@ -551,7 +687,6 @@ export async function checkRevokedStatus(studentId: string) {
       };
     }
 
-    // Always return current database public key so clients can detect transfers
     return {
       isRevoked: false,
       currentPublicKey: student.public_key,
@@ -565,7 +700,7 @@ export async function checkRevokedStatus(studentId: string) {
 
 export async function generateSessionPin(
   scheduleId: number,
-  teacherUserId: string,
+  teacherUserId: string
 ) {
   try {
     const schedule = await prisma.schedule.findUnique({
@@ -576,44 +711,29 @@ export async function generateSessionPin(
       return { success: false, message: "Schedule not found." };
     }
 
-    const currentMinutes = getCurrentPHTimeInMinutes();
-    const [startStr, endStr] = schedule.schedule.split(/\s*-\s*/);
-
-    if (startStr && endStr) {
-      const startMins = parseScheduleTime(startStr);
-      const endMins = parseScheduleTime(endStr);
-
-      if (currentMinutes < startMins - 30) {
-        return {
-          success: false,
-          message: "Cannot start session. Class has not started yet.",
-        };
-      }
-      if (currentMinutes > endMins) {
-        return {
-          success: false,
-          message: "Cannot start session. Class has already ended.",
-        };
-      }
-    }
-
     const pin = Math.floor(1000 + Math.random() * 9000).toString();
-    // UI gets 60 seconds, Database gets 70 seconds to account for network lag
-    const uiExpiresAt = new Date(Date.now() + 60 * 1000);
     const dbExpiresAt = new Date(Date.now() + 70 * 1000);
 
     await prisma.schedule.update({
       where: { id: scheduleId },
-      data: { active_pin: pin, pin_expires_at: dbExpiresAt }, // Save DB expiry
+      data: { active_pin: pin, pin_expires_at: dbExpiresAt },
     });
 
-    // Return UI expiry to the frontend
-    return { success: true, pin, expiresAt: uiExpiresAt.toISOString() };
-  } catch (error) {
+    // Audit log entry for Teacher action
+    await logAdminAction(
+      "GENERATE_SESSION_PIN",
+      `Teacher generated 60s PIN for room ${schedule.lab_room} (${schedule.course_code}).`,
+      String(scheduleId),
+      teacherUserId
+    );
+
     return {
-      success: false,
-      message: "Failed to write session state to database.",
+      success: true,
+      pin,
+      expiresAt: new Date(Date.now() + 60 * 1000).toISOString(),
     };
+  } catch (error) {
+    return { success: false, message: "Failed to generate session PIN." };
   }
 }
 
@@ -647,7 +767,6 @@ export async function loginTeacher(userId: string, passwordString: string) {
     const isMatch = await bcrypt.compare(passwordString, user.password);
     if (!isMatch) return { success: false, message: "Invalid credentials." };
 
-    // Store HTTP-only server cookie
     const cookieStore = await cookies();
     cookieStore.set("teacher_session", user.user_id, {
       httpOnly: true,
@@ -683,6 +802,11 @@ export async function assignTeacherToMultipleSchedules(
       where: { id: { in: scheduleIds } },
       data: { teacher_id: teacherId },
     });
+    await logAdminAction(
+      "BATCH_ASSIGN_TEACHER_SCHEDULE",
+      `Linked instructor DB ID ${teacherId} to ${scheduleIds.length} class schedule(s).`,
+      String(teacherId)
+    );
     return { success: true, message: "Classes assigned successfully." };
   } catch (error) {
     return { success: false, message: "Failed to assign classes in bulk." };
@@ -698,6 +822,11 @@ export async function assignTeacherToSchedule(
       where: { id: scheduleId },
       data: { teacher_id: teacherId },
     });
+    await logAdminAction(
+      "ASSIGN_TEACHER_SCHEDULE",
+      `Assigned instructor DB ID ${teacherId} to schedule ID ${scheduleId}.`,
+      String(scheduleId)
+    );
     return { success: true, message: "Class assigned successfully." };
   } catch (error) {
     return {
@@ -713,6 +842,11 @@ export async function removeTeacherFromSchedule(scheduleId: number) {
       where: { id: scheduleId },
       data: { teacher_id: null },
     });
+    await logAdminAction(
+      "REMOVE_TEACHER_SCHEDULE",
+      `Unlinked instructor assignment from schedule ID ${scheduleId}.`,
+      String(scheduleId)
+    );
     return { success: true, message: "Class removed from instructor." };
   } catch (error) {
     return { success: false, message: "Failed to remove class." };
@@ -721,11 +855,19 @@ export async function removeTeacherFromSchedule(scheduleId: number) {
 
 export async function deleteTeacherAccount(teacherDbId: number) {
   try {
+    const teacher = await prisma.user.findUnique({
+      where: { id: teacherDbId },
+    });
     await prisma.schedule.updateMany({
       where: { teacher_id: teacherDbId },
       data: { teacher_id: null },
     });
     await prisma.user.delete({ where: { id: teacherDbId } });
+    await logAdminAction(
+      "DELETE_TEACHER_ACCOUNT",
+      `Permanently deleted instructor account ${teacher?.name || ""} (User ID: ${teacher?.user_id || teacherDbId}).`,
+      teacher?.user_id || String(teacherDbId)
+    );
     return { success: true, message: "Staff account permanently deleted." };
   } catch (error) {
     return { success: false, message: "Failed to delete the staff account." };
