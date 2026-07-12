@@ -2,6 +2,13 @@
 
 @theme {
   --font-sans: var(--font-satoshi), ui-sans-serif, system-ui, sans-serif;
+  --color-school-blue: #011B51;
+  --color-school-yellow: #FED702;
+  --color-school-maroon: #A51A21;
+}
+
+html {
+  scroll-behavior: smooth;
 }
 
 .custom-scrollbar {
