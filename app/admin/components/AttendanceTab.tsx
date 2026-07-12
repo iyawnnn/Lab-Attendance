@@ -143,7 +143,7 @@ export default function AttendanceTab({ logs, schedules }: { logs: AttendanceLog
 
   const itemsPerPage = 10;
 
-  // Real-time auto-polling every 4 seconds when the window is active
+  // Real-time background sync every 4 seconds
   useEffect(() => {
     const interval = setInterval(() => {
       if (document.visibilityState === "visible") {
@@ -358,23 +358,11 @@ export default function AttendanceTab({ logs, schedules }: { logs: AttendanceLog
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300 relative z-0">
-      
       <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
         <div className="flex justify-between items-center mb-5 border-b border-slate-100 pb-4">
-          <div className="flex items-center gap-3">
-            <div>
-              <h2 className="text-lg font-bold text-slate-900">Record Filters</h2>
-              <p className="text-sm text-slate-500 mt-0.5">Showing {filteredLogs.length} matching records</p>
-            </div>
-            <div className="flex items-center gap-2 bg-slate-100 px-3 py-1 rounded-full">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-              </span>
-              <span className="text-[10px] font-extrabold text-slate-700 uppercase tracking-wider">
-                Live Feed
-              </span>
-            </div>
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">Record Filters</h2>
+            <p className="text-sm text-slate-500 mt-0.5">Showing {filteredLogs.length} matching records</p>
           </div>
 
           <div ref={exportMenuRef} className="relative">

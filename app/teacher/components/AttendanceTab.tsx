@@ -162,7 +162,7 @@ export default function AttendanceTab({ logs = [], schedules = [], teacherUserId
 
   const logsPerPage = 10;
 
-  // Real-time auto-polling every 4 seconds when the window is active
+  // Real-time background sync every 4 seconds
   useEffect(() => {
     const interval = setInterval(() => {
       if (document.visibilityState === "visible") {
@@ -451,23 +451,6 @@ export default function AttendanceTab({ logs = [], schedules = [], teacherUserId
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-4 relative z-10">
-        
-        {/* Header Title with Live Sync Badge */}
-        <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-          <div className="flex items-center gap-2">
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-            </span>
-            <span className="text-xs font-extrabold text-slate-700 tracking-wider uppercase">
-              Live Feed Active
-            </span>
-          </div>
-          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-            Auto-Syncing Every 4s
-          </span>
-        </div>
-
         <div className="flex flex-col lg:flex-row gap-2.5 items-center justify-between w-full">
           <div className="flex flex-wrap lg:flex-nowrap gap-2 w-full lg:flex-1 items-center min-w-0">
             <input
