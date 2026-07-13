@@ -2,7 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Smartphone } from "lucide-react";
 
 interface HeroSectionProps {
   onNavigateSection?: (sectionId: string) => void;
@@ -29,20 +29,21 @@ export default function HeroSection({ onNavigateSection }: HeroSectionProps) {
       <div className="relative z-10 max-w-7xl mx-auto px-6 w-full pb-16 sm:pb-20 md:pb-24">
         <div className="grid lg:grid-cols-12 gap-8 items-end text-left">
           
-          {/* Institutional Title */}
+          {/* Headline */}
           <div className="lg:col-span-7 space-y-3">
             <span className="text-[#FED702] font-black text-xs sm:text-sm uppercase tracking-widest block drop-shadow-xs">
               University of Assumption
             </span>
             <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black text-white leading-[1.10] tracking-tight drop-shadow-sm">
-              Computer Laboratory Attendance System
+              Every Session Counts. <br className="hidden sm:inline" />
+              <span className="text-[#FED702]">Every Second Verified.</span>
             </h1>
           </div>
 
-          {/* Functional Portal Explanation & Actions */}
+          {/* Functional Explanation & Actions */}
           <div className="lg:col-span-5 space-y-5">
             <p className="text-sm sm:text-base font-semibold text-white/90 leading-relaxed drop-shadow-xs">
-              Official campus portal for verifying student laboratory check-ins through room PIN authorization and location boundaries.
+              Official campus platform for validating student laboratory check-ins through room PIN authorization and location boundaries.
             </p>
 
             <div className="flex flex-wrap items-center gap-3">
@@ -57,10 +58,11 @@ export default function HeroSection({ onNavigateSection }: HeroSectionProps) {
 
               <button
                 type="button"
-                onClick={() => onNavigateSection && onNavigateSection("about")}
+                onClick={() => onNavigateSection && onNavigateSection("mobile")}
                 className="inline-flex items-center px-6 py-3.5 rounded-xl bg-black/30 backdrop-blur-md text-white border border-white/40 font-extrabold text-xs uppercase tracking-wider hover:bg-white/20 transition-all cursor-pointer"
               >
-                System Protocol
+                <Smartphone className="mr-2 w-4 h-4" />
+                Download Mobile App
               </button>
             </div>
           </div>
