@@ -19,11 +19,9 @@ import {
   Smartphone,
   Cpu,
   Check,
-  Sparkles,
   Activity
 } from "lucide-react";
 
-// --- Animation Variants ---
 const fadeInUp: Variants = {
   hidden: { opacity: 0, y: 30 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } }
@@ -37,7 +35,6 @@ const staggerContainer: Variants = {
   }
 };
 
-// --- Custom Animated Counter ---
 interface AnimatedCounterProps {
   value: string;
 }
@@ -59,15 +56,13 @@ function AnimatedCounter({ value }: AnimatedCounterProps) {
 
     const suffix = value.replace(/[0-9,]/g, "");
     const hasComma = value.includes(",");
-
-    const duration = 2000; // 2 seconds
+    const duration = 2000;
     const startTime = performance.now();
 
+    /* Exponential ease-out interpolation for counter animations */
     const animate = (currentTime: number) => {
       const elapsed = currentTime - startTime;
       const progress = Math.min(elapsed / duration, 1);
-      
-      // easeOutExpo
       const easeProgress = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress);
       const current = Math.floor(easeProgress * target);
       
@@ -89,10 +84,10 @@ function AnimatedCounter({ value }: AnimatedCounterProps) {
   return <span ref={ref}>{displayValue}</span>;
 }
 
-// --- Interactive CSS Dashboard Mockup ---
 function HeroMockup() {
   const [step, setStep] = useState(0);
 
+  /* Automated step progression cycling through validation sequence visualization */
   useEffect(() => {
     const timer = setInterval(() => {
       setStep((prev) => (prev + 1) % 4);
@@ -102,26 +97,22 @@ function HeroMockup() {
 
   return (
     <div className="relative w-full max-w-lg mx-auto">
-      {/* Background ambient glow matching school colors */}
       <div className="absolute -inset-4 bg-gradient-to-tr from-school-maroon/10 to-school-blue/10 rounded-[2.5rem] blur-3xl opacity-75" />
       
-      {/* Device frame container */}
       <div className="relative bg-white rounded-3xl shadow-2xl border border-gray-155 overflow-hidden backdrop-blur-xs">
-        {/* Mock window top bar */}
         <div className="flex items-center justify-between px-6 py-4 bg-gray-50/80 border-b border-gray-100">
           <div className="flex space-x-2">
             <span className="w-3 h-3 rounded-full bg-school-maroon/90" />
             <span className="w-3 h-3 rounded-full bg-school-yellow" />
             <span className="w-3 h-3 rounded-full bg-emerald-500" />
           </div>
-          <div className="text-[10px] font-mono text-school-blue/55 font-bold tracking-widest uppercase">SECURE ATTENDANCE CONSOLE</div>
+          <div className="text-[10px] font-mono text-school-blue/55 font-bold tracking-widest uppercase">ATTENDANCE CONSOLE</div>
           <div className="flex items-center space-x-1.5">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             <span className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider hidden sm:inline">LIVE</span>
           </div>
         </div>
 
-        {/* Content body with responsive height */}
         <div className="p-6 space-y-6 min-h-[380px] flex flex-col justify-between text-school-blue">
           <AnimatePresence mode="wait">
             {step === 0 && (
@@ -242,9 +233,9 @@ function HeroMockup() {
                     <span className="text-school-yellow font-bold">SIGNING PAYLOAD:</span>
                     <div className="bg-black/20 p-2 rounded text-white/80 space-y-0.5">
                       <div>{"{"}</div>
-                      <div>  "studentId": "UA-2026-993",</div>
-                      <div>  "room": "Room-402",</div>
-                      <div>  "coordinates": "15.0298, 120.6931"</div>
+                      <div>  &quot;studentId&quot;: &quot;2026-993&quot;,</div>
+                      <div>  &quot;room&quot;: &quot;Room-402&quot;,</div>
+                      <div>  &quot;coordinates&quot;: &quot;15.0298, 120.6931&quot;</div>
                       <div>{"}"}</div>
                     </div>
                   </div>
@@ -274,9 +265,9 @@ function HeroMockup() {
                     <Check className="text-white w-8 h-8 stroke-[3.5]" />
                   </motion.div>
                 </div>
-                <h4 className="text-xl font-extrabold text-school-blue">Attendance Signed & Logged</h4>
+                <h4 className="text-xl font-extrabold text-school-blue">Attendance Signed &amp; Logged</h4>
                 <p className="text-sm text-school-blue/70 max-w-xs mx-auto font-medium">
-                  Student <span className="text-school-maroon font-bold">UA-2026-993</span> successfully recorded attendance in <span className="text-school-blue font-bold">C-PEITEL (Room 402)</span>.
+                  Student <span className="text-school-maroon font-bold">2026-993</span> successfully recorded attendance in <span className="text-school-blue font-bold">Computer Laboratory (Room 402)</span>.
                 </p>
                 <div className="inline-block bg-emerald-50 border border-emerald-100 rounded-full px-4 py-1.5 text-[10px] font-bold text-emerald-700 font-mono shadow-sm">
                   Record Encrypted: <span className="text-school-blue font-bold">ecc_9fa12b918f</span>
@@ -285,7 +276,6 @@ function HeroMockup() {
             )}
           </AnimatePresence>
 
-          {/* Quick status bar indicator */}
           <div className="pt-4 border-t border-gray-100 flex justify-between items-center text-xs text-school-blue/50 font-semibold">
             <div className="flex items-center space-x-1.5">
               <span className="w-2 h-2 rounded-full bg-emerald-500" />
@@ -299,23 +289,17 @@ function HeroMockup() {
   );
 }
 
-// --- Mobile App Device Mockup ---
 function MobileAppMockup() {
   return (
     <div className="relative mx-auto w-[290px] h-[590px]">
-      {/* Background ambient glow */}
       <div className="absolute -inset-4 bg-gradient-to-tr from-school-maroon/20 to-school-blue/10 rounded-[3rem] blur-2xl opacity-60 animate-pulse" />
       
-      {/* Phone Case */}
       <div className="relative w-full h-full bg-[#0b0f19] rounded-[3rem] border-[10px] border-gray-900 p-3.5 shadow-2xl flex flex-col justify-between overflow-hidden">
-        {/* Notch */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-32 h-6 bg-gray-900 rounded-b-2xl z-45 flex items-center justify-center">
           <div className="w-12 h-1.5 bg-black/40 rounded-full mb-1" />
         </div>
 
-        {/* Screen */}
         <div className="w-full h-full bg-white rounded-[2.2rem] overflow-hidden flex flex-col justify-between relative text-school-blue select-none">
-          {/* Status Bar */}
           <div className="absolute top-1 left-0 right-0 flex justify-between items-center text-[8px] text-white/80 font-mono px-4 z-40 font-bold">
             <span>09:41</span>
             <div className="flex items-center space-x-1">
@@ -326,15 +310,22 @@ function MobileAppMockup() {
             </div>
           </div>
 
-          {/* Top Banner (computered lab backdrop with overlay) */}
           <div className="relative h-[135px] overflow-hidden flex items-center justify-start px-3.5 pt-4 text-white flex-shrink-0">
-            <img src="/labs.jpg" alt="Lab room background" className="absolute inset-0 w-full h-full object-cover" />
+            <img 
+              src="/labs.jpg" 
+              alt="University of Assumption Computer Laboratory Room Interior" 
+              className="absolute inset-0 w-full h-full object-cover" 
+            />
             <div className="absolute inset-0 bg-[#011B51]/80 mix-blend-multiply" />
             <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-transparent to-black/20" />
             
             <div className="relative z-10 flex items-center space-x-2 mt-3.5">
               <div className="w-8.5 h-8.5 rounded-full bg-white p-0.5 flex items-center justify-center shadow-md">
-                <img src="/ua-logo.png" alt="UA logo" className="w-full h-full object-contain" />
+                <img 
+                  src="/ua-logo.png" 
+                  alt="University of Assumption Official Crest Logo" 
+                  className="w-full h-full object-contain" 
+                />
               </div>
               <div className="font-extrabold text-[9.5px] tracking-tight leading-tight uppercase text-left">
                 <div>
@@ -349,24 +340,19 @@ function MobileAppMockup() {
             </div>
           </div>
 
-          {/* Form Scrollable Body */}
           <div className="flex-1 bg-white p-3.5 space-y-3.5 overflow-y-auto custom-scrollbar flex flex-col justify-between text-[9px] text-school-blue font-semibold">
-            
-            {/* Main Portal Back Link */}
             <div className="text-right">
               <span className="text-[7.5px] font-black tracking-widest text-[#566A96]/80 cursor-pointer hover:text-school-maroon uppercase">
-                ← MAIN PORTAL
+                &larr; MAIN PORTAL
               </span>
             </div>
 
-            {/* Student ID Pill */}
             <div className="flex justify-center">
               <div className="px-4 py-1 bg-[#011B51]/5 border border-[#011B51]/10 rounded-full font-bold text-school-blue text-[8px] shadow-3xs">
                 STUDENT ID: <span className="font-black text-school-blue">2023001839</span>
               </div>
             </div>
 
-            {/* Tabs */}
             <div className="flex space-x-2">
               <div className="w-1/2 bg-[#011B51] text-white font-extrabold text-center py-2.5 rounded-lg text-[8px] cursor-pointer shadow-sm shadow-school-blue/15">
                 LOG ATTENDANCE
@@ -376,16 +362,14 @@ function MobileAppMockup() {
               </div>
             </div>
 
-            {/* Time Card */}
             <div className="bg-white border border-gray-155 rounded-xl p-2 flex items-center space-x-2.5 shadow-3xs">
               <Clock className="w-3.5 h-3.5 text-school-blue flex-shrink-0" />
               <div className="leading-tight text-left">
                 <p className="text-[6.5px] text-gray-400 font-black uppercase tracking-wider">LOCAL STANDARD TIME</p>
-                <p className="text-[8px] font-black text-gray-800 mt-0.5">Sunday, July 12, 2026 • 11:19 PM</p>
+                <p className="text-[8px] font-black text-gray-800 mt-0.5">Sunday, July 12, 2026 &bull; 11:19 PM</p>
               </div>
             </div>
 
-            {/* Facility Selection */}
             <div className="space-y-1 text-left">
               <p className="text-[7px] text-gray-400 font-black tracking-wider uppercase">FACILITY SELECTION</p>
               <div className="w-full bg-gray-50 border border-gray-150 rounded-xl p-2.5 text-[8.5px] text-gray-400 font-bold flex justify-between items-center shadow-3xs cursor-pointer">
@@ -394,7 +378,6 @@ function MobileAppMockup() {
               </div>
             </div>
 
-            {/* Room PIN */}
             <div className="space-y-1 text-left">
               <p className="text-[7px] text-gray-400 font-black tracking-wider uppercase">ROOM PIN</p>
               <div className="w-full bg-gray-50 border border-gray-150 rounded-xl py-2.5 text-center text-[10px] font-bold tracking-[0.2em] text-gray-400 font-mono shadow-3xs">
@@ -402,12 +385,10 @@ function MobileAppMockup() {
               </div>
             </div>
 
-            {/* Action CTA */}
             <div className="w-full bg-[#566A96] hover:bg-[#4f5e80] text-white font-extrabold text-[9px] py-2.5 rounded-xl text-center shadow-md shadow-[#566A96]/15 cursor-pointer transition-colors mt-2">
               SECURELY LOG ATTENDANCE
             </div>
 
-            {/* Deauthorize */}
             <div className="text-center pt-2">
               <span className="text-[7.5px] font-bold text-gray-400 underline hover:text-school-maroon cursor-pointer uppercase tracking-wider">
                 DEAUTHORIZE THIS DEVICE
@@ -417,7 +398,6 @@ function MobileAppMockup() {
         </div>
       </div>
 
-      {/* Floating UI Elements */}
       <motion.div 
         animate={{ y: [0, -6, 0] }}
         transition={{ repeat: Infinity, duration: 3, ease: "easeInOut" }}
@@ -432,7 +412,6 @@ function MobileAppMockup() {
         </div>
       </motion.div>
 
-      {/* Zero Trust Shield Badge on device mockup */}
       <motion.div 
         animate={{ y: [0, 6, 0] }}
         transition={{ repeat: Infinity, duration: 3.5, ease: "easeInOut" }}
@@ -450,19 +429,14 @@ function MobileAppMockup() {
   );
 }
 
-// --- Benefits Schema Illustration ---
 function BenefitsIllustration() {
   return (
     <div className="relative w-full max-w-md mx-auto aspect-square flex items-center justify-center p-6 bg-school-blue/5 border border-school-blue/10 rounded-[2.5rem] overflow-hidden">
-      {/* Glow shapes */}
       <div className="absolute top-1/4 left-1/4 w-40 h-40 bg-school-blue/10 rounded-full blur-3xl" />
       <div className="absolute bottom-1/4 right-1/4 w-40 h-40 bg-school-maroon/5 rounded-full blur-3xl" />
-      
-      {/* Grid Pattern */}
       <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(1,27,81,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(1,27,81,0.04)_1px,transparent_1px)] bg-[size:20px_20px]" />
 
       <div className="relative space-y-6 w-full max-w-xs">
-        {/* Node 1: Student Device */}
         <motion.div 
           whileHover={{ y: -2 }}
           className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center space-x-4 max-w-[270px]"
@@ -476,7 +450,6 @@ function BenefitsIllustration() {
           </div>
         </motion.div>
 
-        {/* Connector line 1 */}
         <div className="ml-14 h-10 w-0.5 border-l-2 border-dashed border-school-blue/20 relative">
           <motion.div 
             animate={{ y: [0, 40] }}
@@ -485,7 +458,6 @@ function BenefitsIllustration() {
           />
         </div>
 
-        {/* Node 2: Geofence gate */}
         <motion.div 
           whileHover={{ y: -2 }}
           className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-center space-x-4 max-w-[270px] self-end ml-auto"
@@ -499,7 +471,6 @@ function BenefitsIllustration() {
           </div>
         </motion.div>
 
-        {/* Connector line 2 */}
         <div className="mr-14 h-10 w-0.5 border-l-2 border-dashed border-school-blue/20 relative ml-auto">
           <motion.div 
             animate={{ y: [0, 40] }}
@@ -508,13 +479,12 @@ function BenefitsIllustration() {
           />
         </div>
 
-        {/* Node 3: Database */}
         <motion.div 
           whileHover={{ y: -2 }}
           className="bg-white p-4 rounded-2xl shadow-sm border border-gray-150 flex items-center space-x-4 max-w-[270px]"
         >
           <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center shadow-sm">
-            <Database className="text-white w-5 h-5" />
+            <Database className="text-emerald-700 w-5 h-5" />
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-xs font-bold text-school-blue">Attendance Record</p>
@@ -526,7 +496,6 @@ function BenefitsIllustration() {
   );
 }
 
-// --- Faq Accordion Item ---
 interface FaqItemProps {
   question: string;
   answer: string;
@@ -539,6 +508,7 @@ function FaqItem({ question, answer, isOpen, onClick }: FaqItemProps) {
     <div className="border-b border-gray-200 py-3 transition-all duration-300">
       <button
         onClick={onClick}
+        aria-expanded={isOpen}
         className="w-full flex items-center justify-between py-4 text-left focus:outline-none group cursor-pointer"
       >
         <span className="font-extrabold text-base md:text-lg text-school-blue leading-snug group-hover:text-school-maroon transition-colors">{question}</span>
@@ -564,7 +534,6 @@ function FaqItem({ question, answer, isOpen, onClick }: FaqItemProps) {
   );
 }
 
-// --- Main Page Component ---
 export default function LandingPage() {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [activeFaq, setActiveFaq] = useState<number | null>(null);
@@ -573,13 +542,12 @@ export default function LandingPage() {
     setActiveFaq(activeFaq === index ? null : index);
   };
 
-  // --- Smooth Scroll Trigger ---
-  // Closes mobile drawer and navigates.
+  /* Smooth scroll implementation compensating for fixed navigation header offset */
   const handleScroll = (id: string) => {
     setIsMobileMenuOpen(false);
     const element = document.getElementById(id);
     if (element) {
-      const offset = 80; // height of fixed navbar
+      const offset = 80;
       const bodyRect = document.body.getBoundingClientRect().top;
       const elementRect = element.getBoundingClientRect().top;
       const elementPosition = elementRect - bodyRect;
@@ -594,113 +562,111 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 text-school-blue font-sans selection:bg-school-yellow selection:text-school-blue overflow-x-hidden antialiased">
-      {/* --- Sticky Navigation Bar --- */}
-      <nav className="fixed top-0 left-0 right-0 h-20 z-50 bg-white/75 backdrop-blur-md border-b border-gray-200/50 shadow-xs animate-none">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
-          <Link href="/" className="flex items-center space-x-3.5 group">
-            <div className="w-10 h-10 relative overflow-hidden transition-transform group-hover:scale-105">
-              <img src="/ua-logo.png" alt="UA Logo" className="w-full h-full object-contain" />
-            </div>
-            <div className="leading-tight">
-              <span className="text-lg font-extrabold text-school-blue tracking-tight block">University of Assumption</span>
-              <span className="text-[9px] font-bold text-school-maroon uppercase tracking-widest block -mt-0.5">Lab Attendance Secure System</span>
-            </div>
-          </Link>
+      <header>
+        <nav className="fixed top-0 left-0 right-0 h-20 z-50 bg-white/75 backdrop-blur-md border-b border-gray-200/50 shadow-xs animate-none">
+          <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+            <Link href="/" className="flex items-center space-x-3.5 group">
+              <div className="w-10 h-10 relative overflow-hidden transition-transform group-hover:scale-105">
+                <img 
+                  src="/ua-logo.png" 
+                  alt="University of Assumption Seal Logo" 
+                  className="w-full h-full object-contain" 
+                />
+              </div>
+              <div className="leading-tight">
+                <span className="text-lg font-extrabold text-school-blue tracking-tight block">University of Assumption</span>
+                <span className="text-[9px] font-bold text-school-maroon uppercase tracking-widest block -mt-0.5">Laboratory Attendance System</span>
+              </div>
+            </Link>
 
-          {/* Desktop Nav Items */}
-          <div className="hidden md:flex items-center space-x-8">
-            <button 
-              onClick={() => handleScroll("features")}
-              className="text-sm font-bold text-school-blue/80 hover:text-school-maroon transition-colors cursor-pointer"
-            >
-              Features
-            </button>
-            <button 
-              onClick={() => handleScroll("how-it-works")}
-              className="text-sm font-bold text-school-blue/80 hover:text-school-maroon transition-colors cursor-pointer"
-            >
-              How it Works
-            </button>
-            <button 
-              onClick={() => handleScroll("mobile")}
-              className="text-sm font-bold text-school-blue/80 hover:text-school-maroon transition-colors cursor-pointer"
-            >
-              Mobile App
-            </button>
-            <div className="flex items-center border-l border-gray-200/60 pl-6 ml-2">
-              <Link 
-                href="/student" 
-                className="text-sm font-bold bg-school-blue text-school-yellow px-5 py-2.5 rounded-xl hover:bg-school-maroon hover:text-white shadow-md shadow-school-blue/15 hover:shadow-lg transition-all"
+            <div className="hidden md:flex items-center space-x-8">
+              <button 
+                onClick={() => handleScroll("features")}
+                className="text-sm font-bold text-school-blue/80 hover:text-school-maroon transition-colors cursor-pointer"
               >
-                Student Login
-              </Link>
+                Features
+              </button>
+              <button 
+                onClick={() => handleScroll("how-it-works")}
+                className="text-sm font-bold text-school-blue/80 hover:text-school-maroon transition-colors cursor-pointer"
+              >
+                How it Works
+              </button>
+              <button 
+                onClick={() => handleScroll("mobile")}
+                className="text-sm font-bold text-school-blue/80 hover:text-school-maroon transition-colors cursor-pointer"
+              >
+                Mobile App
+              </button>
+              <div className="flex items-center border-l border-gray-200/60 pl-6 ml-2">
+                <Link 
+                  href="/student" 
+                  className="text-sm font-bold bg-school-blue text-school-yellow px-5 py-2.5 rounded-xl hover:bg-school-maroon hover:text-white shadow-md shadow-school-blue/15 hover:shadow-lg transition-all"
+                >
+                  Student Login
+                </Link>
+              </div>
             </div>
+
+            <button 
+              className="md:hidden p-2 rounded-xl text-school-blue hover:bg-gray-100 transition-colors focus:outline-none"
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              aria-label="Toggle Navigation Menu"
+            >
+              {isMobileMenuOpen ? <X className="w-6 h-6 stroke-[2.5]" /> : <Menu className="w-6 h-6 stroke-[2.5]" />}
+            </button>
           </div>
 
-          {/* Mobile Menu Toggle */}
-          <button 
-            className="md:hidden p-2 rounded-xl text-school-blue hover:bg-gray-100 transition-colors focus:outline-none"
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          >
-            {isMobileMenuOpen ? <X className="w-6 h-6 stroke-[2.5]" /> : <Menu className="w-6 h-6 stroke-[2.5]" />}
-          </button>
-        </div>
+          <AnimatePresence>
+            {isMobileMenuOpen && (
+              <div className="fixed inset-0 top-20 z-40 md:hidden">
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute inset-0 bg-black/20 backdrop-blur-2xs cursor-pointer"
+                  onClick={() => setIsMobileMenuOpen(false)}
+                />
 
-        {/* Mobile Navigation Drawer Overlay viewport */}
-        <AnimatePresence>
-          {isMobileMenuOpen && (
-            <div className="fixed inset-0 top-20 z-40 md:hidden">
-              {/* Dark translucent backdrop overlay */}
-              <motion.div 
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.15 }}
-                className="absolute inset-0 bg-black/20 backdrop-blur-2xs cursor-pointer"
-                onClick={() => setIsMobileMenuOpen(false)}
-              />
-
-              {/* White Menu Container */}
-              <motion.div 
-                initial={{ y: -20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                exit={{ y: -20, opacity: 0 }}
-                transition={{ duration: 0.2, ease: "easeOut" }}
-                className="absolute top-0 left-0 right-0 bg-white border-b border-gray-250 shadow-xl p-6 flex flex-col space-y-4 font-bold text-base z-50"
-              >
-                <button 
-                  onClick={() => handleScroll("features")}
-                  className="text-left text-school-blue hover:text-school-maroon transition-colors py-3 px-2 rounded-lg hover:bg-gray-55 cursor-pointer block w-full"
+                <motion.div 
+                  initial={{ y: -20, opacity: 0 }}
+                  animate={{ y: 0, opacity: 1 }}
+                  exit={{ y: -20, opacity: 0 }}
+                  transition={{ duration: 0.2, ease: "easeOut" }}
+                  className="absolute top-0 left-0 right-0 bg-white border-b border-gray-250 shadow-xl p-6 flex flex-col space-y-4 font-bold text-base z-50"
                 >
-                  Features
-                </button>
-                <button 
-                  onClick={() => handleScroll("how-it-works")}
-                  className="text-left text-school-blue hover:text-school-maroon transition-colors py-3 px-2 rounded-lg hover:bg-gray-55 cursor-pointer block w-full"
-                >
-                  How it Works
-                </button>
-                <button 
-                  onClick={() => handleScroll("mobile")}
-                  className="text-left text-school-blue hover:text-school-maroon transition-colors py-3 px-2 rounded-lg hover:bg-gray-55 cursor-pointer block w-full"
-                >
-                  Mobile App
-                </button>
-                <hr className="border-gray-100 my-2" />
-                <Link href="/student" onClick={() => setIsMobileMenuOpen(false)} className="text-center w-full py-3.5 rounded-xl bg-school-blue text-school-yellow shadow-md shadow-school-blue/15 hover:bg-school-maroon hover:text-white transition-all">Student Login</Link>
-              </motion.div>
-            </div>
-          )}
-        </AnimatePresence>
-      </nav>
+                  <button 
+                    onClick={() => handleScroll("features")}
+                    className="text-left text-school-blue hover:text-school-maroon transition-colors py-3 px-2 rounded-lg hover:bg-gray-55 cursor-pointer block w-full"
+                  >
+                    Features
+                  </button>
+                  <button 
+                    onClick={() => handleScroll("how-it-works")}
+                    className="text-left text-school-blue hover:text-school-maroon transition-colors py-3 px-2 rounded-lg hover:bg-gray-55 cursor-pointer block w-full"
+                  >
+                    How it Works
+                  </button>
+                  <button 
+                    onClick={() => handleScroll("mobile")}
+                    className="text-left text-school-blue hover:text-school-maroon transition-colors py-3 px-2 rounded-lg hover:bg-gray-55 cursor-pointer block w-full"
+                  >
+                    Mobile App
+                  </button>
+                  <hr className="border-gray-100 my-2" />
+                  <Link href="/student" onClick={() => setIsMobileMenuOpen(false)} className="text-center w-full py-3.5 rounded-xl bg-school-blue text-school-yellow shadow-md shadow-school-blue/15 hover:bg-school-maroon hover:text-white transition-all">Student Login</Link>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
+        </nav>
+      </header>
 
       <main className="pt-20">
-        {/* --- 1. Hero Section --- */}
         <section className="relative overflow-hidden pt-10 pb-16 md:pt-20 md:pb-28 lg:pt-24 lg:pb-36 bg-white">
-          {/* Subtle high-contrast dot grid pattern overlay */}
           <div className="absolute inset-0 bg-[radial-gradient(rgba(1,27,81,0.06)_1.2px,transparent_1.2px)] bg-[size:28px_28px] [mask-image:radial-gradient(ellipse_60%_60%_at_50%_0%,#000_80%,transparent_100%)] pointer-events-none" />
           
-          {/* Background spotlight color glows - blue and maroon overlays (no yellow) */}
           <div className="absolute top-[-10%] left-[-5%] w-[48%] h-[48%] bg-school-maroon/5 rounded-full blur-[115px] pointer-events-none" />
           <div className="absolute top-[15%] right-[-8%] w-[42%] h-[55%] bg-school-blue/5 rounded-full blur-[130px] pointer-events-none" />
           <div className="absolute top-[10%] left-[38%] w-[32%] h-[42%] bg-school-maroon/3 rounded-full blur-[110px] pointer-events-none" />
@@ -750,7 +716,6 @@ export default function LandingPage() {
                 </motion.div>
               </motion.div>
 
-              {/* High-fidelity interactive mockup surrounded by clean structural panel */}
               <motion.div 
                 initial={{ opacity: 0, scale: 0.96 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -764,7 +729,6 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* --- 2. Trusted by Students (Stats) --- */}
         <section className="bg-school-blue py-10 md:py-16 shadow-inner relative overflow-hidden">
           <div className="absolute inset-0 bg-white/5 opacity-5 pointer-events-none" />
           <div className="max-w-7xl mx-auto px-6 relative z-10">
@@ -777,14 +741,12 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* --- 3. Features Section --- */}
         <section id="features" className="py-12 md:py-24 lg:py-32 bg-slate-50/60 relative scroll-mt-20">
-          {/* Subtle colored spot on mobile/desktop */}
           <div className="absolute top-1/3 left-1/2 -translate-x-1/2 w-80 h-80 bg-school-blue/5 rounded-full blur-3xl pointer-events-none" />
           
           <div className="max-w-7xl mx-auto px-6 relative z-10">
             <div className="text-center max-w-3xl mx-auto mb-12 md:mb-20">
-              <h2 className="text-3xl sm:text-4xl font-extrabold text-school-blue mt-2 mb-4 md:mb-6">Designed for Security & Speed</h2>
+              <h2 className="text-3xl sm:text-4xl font-extrabold text-school-blue mt-2 mb-4 md:mb-6">Designed for Security &amp; Speed</h2>
               <p className="text-base sm:text-lg text-school-blue/70 font-semibold leading-relaxed">Our platform combines Elliptic Curve cryptography and precise geofencing parameters to ensure attendance logs are accurate, reliable, and completely fraud-resistant.</p>
             </div>
             
@@ -818,7 +780,6 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* --- 4. How It Works --- */}
         <section id="how-it-works" className="py-12 md:py-20 lg:py-28 bg-white border-y border-gray-200/60 overflow-hidden scroll-mt-20">
           <div className="max-w-7xl mx-auto px-6">
             <div className="text-center mb-12 md:mb-20">
@@ -827,7 +788,6 @@ export default function LandingPage() {
             </div>
             
             <div className="relative pt-4">
-              {/* Central connecting bar on desktop */}
               <div className="hidden md:block absolute top-[44px] left-[10%] right-[10%] h-[3px] bg-gray-100" />
               
               <div className="grid grid-cols-1 md:grid-cols-5 gap-10 md:gap-6 relative">
@@ -852,7 +812,7 @@ export default function LandingPage() {
                         {item.step}
                       </span>
                     </div>
-                    <h4 className="text-base font-extrabold text-school-blue mb-2">{item.title}</h4>
+                    <h3 className="text-base font-extrabold text-school-blue mb-2">{item.title}</h3>
                     <p className="text-xs font-semibold text-school-blue/65 leading-relaxed max-w-[190px]">{item.desc}</p>
                   </motion.div>
                 ))}
@@ -861,7 +821,6 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* --- 5. Why Choose This System --- */}
         <section className="py-12 md:py-24 lg:py-32 bg-slate-50/70">
           <div className="max-w-7xl mx-auto px-6">
             <div className="text-center max-w-3xl mx-auto mb-12 md:mb-20">
@@ -901,11 +860,9 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* --- 6. Mobile Application Section --- */}
         <section id="mobile" className="py-12 md:py-20 lg:py-28 bg-white relative overflow-hidden scroll-mt-20">
           <div className="max-w-7xl mx-auto px-6">
             <div className="bg-school-blue rounded-[3rem] p-6 md:p-16 overflow-hidden relative shadow-2xl">
-              {/* Colored background blur */}
               <div className="absolute right-0 bottom-0 w-96 h-96 bg-school-maroon rounded-full blur-[150px] opacity-60" />
               
               <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center relative z-10">
@@ -918,7 +875,7 @@ export default function LandingPage() {
                   <div className="pt-4 flex flex-col sm:flex-row items-start sm:items-center space-y-4 sm:space-y-0 sm:space-x-6">
                     <div className="inline-block transition-transform hover:-translate-y-0.5 pointer-events-none opacity-85">
                       <img 
-                        alt="Get it on Google Play" 
+                        alt="Get it on Google Play badge for University of Assumption Laboratory Attendance Mobile App" 
                         src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" 
                         className="h-16" 
                       />
@@ -929,7 +886,6 @@ export default function LandingPage() {
                   </div>
                 </div>
 
-                {/* CSS Android Phone Mockup */}
                 <div className="flex justify-center lg:justify-end">
                   <MobileAppMockup />
                 </div>
@@ -938,13 +894,10 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* --- 7. System Benefits (2-Column Layout) --- */}
         <section className="py-12 md:py-24 lg:py-32 bg-white border-b border-gray-200/50 relative">
-          {/* Subtle glow light behind illustration - no yellow */}
           <div className="absolute top-1/4 left-1/4 w-80 h-80 bg-school-blue/5 rounded-full blur-3xl pointer-events-none" />
 
           <div className="max-w-7xl mx-auto px-6 grid lg:grid-cols-2 gap-12 lg:gap-16 items-center relative z-10">
-            {/* Visual Scheme illustration on left */}
             <motion.div 
               initial={{ opacity: 0, x: -20 }}
               whileInView={{ opacity: 1, x: 0 }}
@@ -954,7 +907,6 @@ export default function LandingPage() {
               <BenefitsIllustration />
             </motion.div>
             
-            {/* Benefits List on right */}
             <div className="space-y-6 md:space-y-8 text-left">
               <div>
                 <h2 className="text-3xl sm:text-4xl font-extrabold text-school-blue mt-2 mb-4 md:mb-6">Built for Modern Educational Infrastructure</h2>
@@ -982,7 +934,7 @@ export default function LandingPage() {
                       <Check className="w-4.5 h-4.5 stroke-[3]" />
                     </div>
                     <div>
-                      <h4 className="text-sm font-extrabold text-school-blue">{benefit.title}</h4>
+                      <h3 className="text-sm font-extrabold text-school-blue">{benefit.title}</h3>
                       <p className="text-xs font-bold text-school-blue/65 mt-0.5">{benefit.desc}</p>
                     </div>
                   </motion.li>
@@ -992,7 +944,6 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* --- 8. Frequently Asked Questions --- */}
         <section className="py-12 md:py-24 lg:py-32 bg-slate-50/50 border-b border-gray-250 relative">
           <div className="max-w-3xl mx-auto px-6 relative z-10">
             <div className="text-center mb-12 md:mb-16">
@@ -1038,11 +989,9 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* --- 9. Call-to-Action Section --- */}
         <section className="py-12 md:py-24 lg:py-32 bg-white relative text-center">
           <div className="max-w-5xl mx-auto px-6">
             <div className="relative bg-slate-50 border border-gray-155 rounded-[2.5rem] p-10 md:p-16 overflow-hidden shadow-xs">
-              {/* Subtle colored spotlight blur */}
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[350px] h-[350px] bg-school-maroon/5 rounded-full blur-[100px] pointer-events-none" />
               
               <div className="relative z-10 space-y-6 max-w-3xl mx-auto">
@@ -1067,18 +1016,20 @@ export default function LandingPage() {
         </section>
       </main>
 
-      {/* --- 10. Footer Section --- */}
       <footer className="bg-school-blue text-white pt-12 pb-8 md:pt-20 md:pb-10 border-t border-white/10 relative overflow-hidden">
         <div className="absolute inset-0 bg-white/2 opacity-2 pointer-events-none" />
         <div className="max-w-7xl mx-auto px-6 relative z-10">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-10 md:gap-12 mb-16 text-left">
             <div className="md:col-span-1 space-y-5">
               <div className="flex items-center space-x-3">
-                {/* Official Color Logo of University of the Assumption */}
                 <div className="w-9 h-9 rounded-full bg-white p-1.5 flex items-center justify-center shadow-md">
-                  <img src="/ua-logo.png" alt="UA Logo" className="w-full h-full object-contain" />
+                  <img 
+                    src="/ua-logo.png" 
+                    alt="University of Assumption Seal" 
+                    className="w-full h-full object-contain" 
+                  />
                 </div>
-                <span className="text-lg font-extrabold tracking-tight">UA Lab System</span>
+                <span className="text-lg font-extrabold tracking-tight">University of Assumption</span>
               </div>
               <p className="text-white/60 font-semibold text-xs leading-relaxed">
                 A secure, modern attendance tracking solution designed for university laboratories utilizing PostgreSQL on Neon and robust zero-trust cryptographic signatures.
@@ -1086,7 +1037,7 @@ export default function LandingPage() {
             </div>
             
             <div className="space-y-5">
-              <h4 className="font-extrabold text-school-yellow text-xs uppercase tracking-widest">Quick Links</h4>
+              <h3 className="font-extrabold text-school-yellow text-xs uppercase tracking-widest">Quick Links</h3>
               <ul className="space-y-3.5 text-xs font-semibold text-white/70">
                 <li><Link href="/student" className="hover:text-school-yellow transition-colors">Student Portal</Link></li>
                 <li>
@@ -1117,19 +1068,19 @@ export default function LandingPage() {
             </div>
             
             <div className="space-y-5">
-              <h4 className="font-extrabold text-school-yellow text-xs uppercase tracking-widest">Legal</h4>
+              <h3 className="font-extrabold text-school-yellow text-xs uppercase tracking-widest">Legal</h3>
               <ul className="space-y-3.5 text-xs font-semibold text-white/70">
-                <li><Link href="#" className="hover:text-school-yellow transition-colors">Privacy Policy</Link></li>
-                <li><Link href="#" className="hover:text-school-yellow transition-colors">Terms of Service</Link></li>
-                <li><Link href="#" className="hover:text-school-yellow transition-colors">Data Security</Link></li>
+                <li><Link href="/privacy" className="hover:text-school-yellow transition-colors">Privacy Policy</Link></li>
+                <li><Link href="/privacy" className="hover:text-school-yellow transition-colors">Terms of Service</Link></li>
+                <li><Link href="/privacy" className="hover:text-school-yellow transition-colors">Data Security</Link></li>
               </ul>
             </div>
             
             <div className="space-y-5">
-              <h4 className="font-extrabold text-school-yellow text-xs uppercase tracking-widest">Contact</h4>
+              <h3 className="font-extrabold text-school-yellow text-xs uppercase tracking-widest">Contact</h3>
               <ul className="space-y-3.5 text-xs font-semibold text-white/70">
                 <li className="flex items-center"><MapPin className="w-4 h-4 mr-2 text-school-yellow" /> Pampanga, Philippines</li>
-                <li>support@ualabsystem.edu.ph</li>
+                <li>support@universityofassumption.edu.ph</li>
               </ul>
             </div>
           </div>
@@ -1137,7 +1088,7 @@ export default function LandingPage() {
           <div className="border-t border-white/10 pt-8 flex flex-col md:flex-row justify-between items-center text-xs font-semibold text-white/40">
             <p>&copy; {new Date().getFullYear()} University of Assumption Laboratory Attendance System. All rights reserved.</p>
             <div className="mt-4 md:mt-0 flex space-x-6">
-              <span className="hover:text-school-yellow transition-colors cursor-default">Built with Next.js & React</span>
+              <span className="hover:text-school-yellow transition-colors cursor-default">Built with Next.js &amp; React</span>
             </div>
           </div>
         </div>
@@ -1146,14 +1097,12 @@ export default function LandingPage() {
   );
 }
 
-// --- Helper Stats Subcomponent ---
 interface StatItemProps {
   label: string;
   value: string;
   delay: number;
 }
 
-// Stats Item using school colors
 function StatItem({ label, value, delay }: StatItemProps) {
   return (
     <motion.div 
