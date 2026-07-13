@@ -49,28 +49,77 @@ export default function VerificationProtocolSection() {
   return (
     <section
       id="how-it-works"
-      className="bg-slate-50/70 text-[#011B51] py-20 md:py-28 border-b border-gray-200/80 overflow-hidden"
+      className="bg-slate-50/70 text-[#011B51] py-16 sm:py-20 md:py-28 border-b border-gray-200/80 overflow-hidden"
     >
-      <div className="max-w-7xl mx-auto px-6 space-y-16">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 space-y-12 sm:space-y-16">
         
         {/* Centered Section Header */}
         <div className="text-center max-w-2xl mx-auto space-y-3">
-          <h2 className="text-3xl sm:text-4xl font-extrabold text-[#011B51] tracking-tight">
+          <span className="text-xs font-black text-[#A51A21] uppercase tracking-widest block">
+            Verification Protocol
+          </span>
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-[#011B51] tracking-tight">
             Seamless Step-by-Step Check-in
           </h2>
-          <p className="text-gray-600 text-sm sm:text-base font-semibold">
+          <p className="text-gray-600 text-xs sm:text-sm md:text-base font-semibold">
             Five simple actions to securely verify and lock in your class attendance.
           </p>
         </div>
 
-        {/* Step-by-Step Horizontal Pipeline */}
-        <div className="relative">
-          
-          {/* Connecting Line */}
-          <div className="hidden md:block absolute top-10 left-[10%] right-[10%] h-0.5 bg-gray-200 z-0" />
+        {/* Vertical Timeline View for Mobile and Tablet (< lg) */}
+        <div className="lg:hidden relative pl-2 sm:pl-6 space-y-8 max-w-md sm:max-w-xl mx-auto">
+          {/* Vertical Connecting Track Line */}
+          <div className="absolute top-6 bottom-6 left-8 sm:left-12 w-0.5 bg-gray-200 z-0" />
 
-          {/* 5 Horizontal Steps Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-8 md:gap-4 relative z-10">
+          {protocolSteps.map((step, idx) => {
+            const Icon = step.icon;
+            return (
+              <div
+                key={idx}
+                className="relative z-10 flex items-start space-x-4 sm:space-x-6 group"
+              >
+                {/* Icon Box Container with Step Badge */}
+                <div className="relative shrink-0">
+                  <div
+                    className={`w-12 h-12 sm:w-14 sm:h-14 bg-white rounded-xl sm:rounded-2xl border-2 flex items-center justify-center shadow-xs transition-all ${
+                      step.isSuccessStep
+                        ? "border-[#A51A21]"
+                        : "border-[#011B51]/30 group-hover:border-[#011B51]"
+                    }`}
+                  >
+                    <Icon
+                      className={`w-5 h-5 sm:w-6 sm:h-6 stroke-[2.2] ${
+                        step.isSuccessStep ? "text-[#A51A21]" : "text-[#011B51]"
+                      }`}
+                    />
+                  </div>
+
+                  {/* Step Number Badge */}
+                  <div className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-[#FED702] border border-white flex items-center justify-center font-mono text-[9px] font-black text-[#011B51] shadow-xs">
+                    {step.stepNumber}
+                  </div>
+                </div>
+
+                {/* Step Content */}
+                <div className="pt-1 space-y-1 text-left">
+                  <h3 className="text-base sm:text-lg font-extrabold text-[#011B51] tracking-tight">
+                    {step.title}
+                  </h3>
+                  <p className="text-xs sm:text-sm text-gray-600 font-medium leading-relaxed">
+                    {step.description}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Horizontal Pipeline View for Desktop (>= lg) */}
+        <div className="hidden lg:block relative">
+          {/* Top Horizontal Connecting Line */}
+          <div className="absolute top-10 left-[10%] right-[10%] h-0.5 bg-gray-200 z-0" />
+
+          <div className="grid grid-cols-5 gap-6 relative z-10">
             {protocolSteps.map((step, idx) => {
               const Icon = step.icon;
               return (
@@ -78,7 +127,7 @@ export default function VerificationProtocolSection() {
                   key={idx}
                   className="flex flex-col items-center text-center space-y-4 group"
                 >
-                  {/* Icon Box Container with Step Number Badge */}
+                  {/* Icon Box Container with Step Badge */}
                   <div className="relative">
                     <div
                       className={`w-20 h-20 bg-white rounded-2xl border-2 flex items-center justify-center shadow-xs transition-all ${
@@ -88,7 +137,7 @@ export default function VerificationProtocolSection() {
                       }`}
                     >
                       <Icon
-                        className={`w-8 h-8 stroke-[2] ${
+                        className={`w-8 h-8 stroke-[2.2] ${
                           step.isSuccessStep ? "text-[#A51A21]" : "text-[#011B51]"
                         }`}
                       />
@@ -113,7 +162,6 @@ export default function VerificationProtocolSection() {
               );
             })}
           </div>
-
         </div>
 
       </div>
