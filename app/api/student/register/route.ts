@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { OAuth2Client } from "google-auth-library";
-import { SignJWT } from "jose";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { checkRateLimit } from "@/lib/ratelimit";
+import crypto from "crypto";
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -48,29 +48,8 @@ export async function POST(req: Request) {
     }
 
     const email = payload.email.toLowerCase();
-    const emailDomain = email.split("@")[1];
-    const allowedDomains = (process.env.ALLOWED_EMAIL_DOMAINS || "")
-      .split(",")
-      .map((domain) => domain.trim().toLowerCase());
 
-    const isDomainAllowed = allowedDomains.some(
-      (domain) => emailDomain === domain || emailDomain.endsWith("." + domain)
-    );
-
-    if (!isDomainAllowed) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Access restricted to authorized institutional email accounts.",
-        },
-        { status: 403 }
-      );
-    }
-
-    const existingEmail = await db.student.findUnique({
-      where: { email },
-    });
-
+    const existingEmail = await db.student.findUnique({ where: { email } });
     if (existingEmail) {
       return NextResponse.json(
         { success: false, message: "An account with this email already exists." },
@@ -78,10 +57,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const existingStudentId = await db.student.findUnique({
-      where: { student_id: studentId },
-    });
-
+    const existingStudentId = await db.student.findUnique({ where: { student_id: studentId } });
     if (existingStudentId) {
       return NextResponse.json(
         { success: false, message: "This Student ID is already registered." },
@@ -91,6 +67,7 @@ export async function POST(req: Request) {
 
     const salt = await bcrypt.genSalt(10);
     const hashedPin = await bcrypt.hash(recoveryPin, salt);
+    const sessionToken = crypto.randomUUID();
 
     const newStudent = await db.student.create({
       data: {
@@ -100,19 +77,9 @@ export async function POST(req: Request) {
         last_name: lastName,
         public_key: publicKey,
         recovery_pin: hashedPin,
+        session_token: sessionToken,
       },
     });
-
-    const jwtSecret = new TextEncoder().encode(process.env.JWT_SECRET);
-    const sessionToken = await new SignJWT({
-      id: newStudent.id,
-      studentId: newStudent.student_id,
-      email: newStudent.email,
-    })
-      .setProtectedHeader({ alg: "HS256" })
-      .setIssuedAt()
-      .setExpirationTime("30d")
-      .sign(jwtSecret);
 
     return NextResponse.json({
       success: true,

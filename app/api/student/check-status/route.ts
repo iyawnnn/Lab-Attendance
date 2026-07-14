@@ -1,5 +1,3 @@
-// app/api/student/check-status/route.ts
-
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
@@ -7,6 +5,8 @@ export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const studentId = searchParams.get("studentId");
+    const sessionToken = searchParams.get("sessionToken");
+    const devicePublicKey = searchParams.get("publicKey");
 
     if (!studentId) {
       return NextResponse.json(
@@ -27,7 +27,12 @@ export async function GET(req: Request) {
       });
     }
 
-    const isRevoked = !student.public_key || student.public_key === "";
+    // Session is revoked if public key is cleared OR session token/public key no longer match DB
+    const isRevoked =
+      !student.public_key ||
+      student.public_key === "" ||
+      (sessionToken ? student.session_token !== sessionToken : false) ||
+      (devicePublicKey ? student.public_key !== devicePublicKey : false);
 
     return NextResponse.json({
       success: true,

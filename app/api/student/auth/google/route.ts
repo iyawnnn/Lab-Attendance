@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { OAuth2Client } from "google-auth-library";
-import { SignJWT } from "jose";
 import { db } from "@/lib/db";
+import crypto from "crypto";
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -54,16 +54,14 @@ export async function POST(req: Request) {
     });
 
     if (student) {
-      const jwtSecret = new TextEncoder().encode(process.env.JWT_SECRET);
-      const sessionToken = await new SignJWT({
-        id: student.id,
-        studentId: student.student_id,
-        email: student.email,
-      })
-        .setProtectedHeader({ alg: "HS256" })
-        .setIssuedAt()
-        .setExpirationTime("30d")
-        .sign(jwtSecret);
+      // Generate a new session token to enforce single active session
+      const sessionToken = crypto.randomUUID();
+
+      // Save new session token in database to revoke previous device sessions
+      await db.student.update({
+        where: { id: student.id },
+        data: { session_token: sessionToken },
+      });
 
       return NextResponse.json({
         success: true,
