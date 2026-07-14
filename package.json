@@ -11,10 +11,13 @@
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
+    "@react-oauth/google": "^0.13.5",
     "bcryptjs": "^3.0.3",
     "framer-motion": "^12.42.2",
     "geolib": "^3.3.14",
+    "google-auth-library": "^10.9.0",
     "idb-keyval": "^6.2.2",
+    "jose": "^6.2.3",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "lucide-react": "^1.24.0",
