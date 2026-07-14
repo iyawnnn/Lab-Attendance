@@ -146,7 +146,7 @@ interface AttendanceTabProps {
 export default function AttendanceTab({ logs = [], schedules = [], teacherUserId }: AttendanceTabProps) {
   const router = useRouter();
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [dayFilter, setDayFilter] = useState("");
   const [classFilter, setClassFilter] = useState("");
   const [dateFilter, setDateFilter] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -183,21 +183,58 @@ export default function AttendanceTab({ logs = [], schedules = [], teacherUserId
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const scheduleOptions = useMemo(() => {
-    return schedules.map(sched => ({
-      id: sched.id.toString(),
-      label: `${sched.course_code} - Sec ${sched.section} (${sched.lab_room})`
-    }));
-  }, [schedules]);
+  const dayOptions = [
+    { id: "Monday", label: "Monday" },
+    { id: "Tuesday", label: "Tuesday" },
+    { id: "Wednesday", label: "Wednesday" },
+    { id: "Thursday", label: "Thursday" },
+    { id: "Friday", label: "Friday" },
+    { id: "Saturday", label: "Saturday" }
+  ];
 
   const statusOptions = [
     { id: "ON_TIME", label: "On Time" },
     { id: "LATE", label: "Late" }
   ];
 
+  // Dynamic Class filtering option based on chosen day criteria
+  const scheduleOptions = useMemo(() => {
+    let actionableSchedules = schedules;
+
+    if (dayFilter !== "") {
+      actionableSchedules = schedules.filter(sched => {
+        if (!sched.date) return false;
+        
+        // Match weekday name criteria or calculate day string values from hard-coded dates
+        if (sched.date.toLowerCase() === dayFilter.toLowerCase()) return true;
+        
+        if (!isNaN(Date.parse(sched.date))) {
+          const extractedDay = new Date(sched.date).toLocaleDateString("en-US", {
+            weekday: "long",
+            timeZone: "Asia/Manila"
+          });
+          return extractedDay.toLowerCase() === dayFilter.toLowerCase();
+        }
+        return false;
+      });
+    }
+
+    return actionableSchedules.map(sched => ({
+      id: sched.id.toString(),
+      label: `${sched.course_code} - Sec ${sched.section} (${sched.lab_room})`
+    }));
+  }, [schedules, dayFilter]);
+
+  // Handle active choice eviction if filtered schedule set alters completely
+  useEffect(() => {
+    if (classFilter && !scheduleOptions.some(opt => opt.id === classFilter)) {
+      setClassFilter("");
+    }
+  }, [dayFilter, scheduleOptions, classFilter]);
+
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, statusFilter, classFilter, dateFilter]);
+  }, [searchTerm, dayFilter, classFilter, dateFilter]);
 
   const filteredLogs = useMemo(() => {
     return logs.filter((log) => {
@@ -210,7 +247,17 @@ export default function AttendanceTab({ logs = [], schedules = [], teacherUserId
         studentName.includes(searchTerm.toLowerCase()) ||
         studentId.includes(searchTerm.toLowerCase()) ||
         courseCode.includes(searchTerm.toLowerCase());
-      const statusMatch = statusFilter === "" || log.status === statusFilter;
+
+      let dayMatch = true;
+      if (dayFilter !== "") {
+        const logDate = new Date(log.timestamp);
+        const recordDay = logDate.toLocaleDateString("en-US", {
+          weekday: "long",
+          timeZone: "Asia/Manila"
+        });
+        dayMatch = recordDay === dayFilter;
+      }
+
       const classMatch =
         classFilter === "" || log.schedule?.id.toString() === classFilter;
 
@@ -225,9 +272,9 @@ export default function AttendanceTab({ logs = [], schedules = [], teacherUserId
         dateMatch = localDateString === dateFilter;
       }
 
-      return searchMatch && statusMatch && classMatch && dateMatch;
+      return searchMatch && dayMatch && classMatch && dateMatch;
     });
-  }, [logs, searchTerm, statusFilter, classFilter, dateFilter]);
+  }, [logs, searchTerm, dayFilter, classFilter, dateFilter]);
 
   async function handleManualSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -359,9 +406,7 @@ export default function AttendanceTab({ logs = [], schedules = [], teacherUserId
     const dateText = dateFilter 
       ? new Date(dateFilter).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) 
       : "All Dates";
-    const statusText = statusFilter 
-      ? (statusFilter === "ON_TIME" ? "On Time" : "Late") 
-      : "All Statuses";
+    const dayText = dayFilter ? dayFilter : "All Days";
 
     doc.setTextColor(51, 65, 85);
     doc.setFontSize(9);
@@ -384,7 +429,7 @@ export default function AttendanceTab({ logs = [], schedules = [], teacherUserId
     doc.setFont("helvetica", "bold");
     doc.text("Total Logs:", 120, 38);
     doc.setFont("helvetica", "normal");
-    doc.text(`${filteredLogs.length} Records (${statusText})`, 142, 38);
+    doc.text(`${filteredLogs.length} Records (${dayText})`, 142, 38);
 
     doc.setDrawColor(226, 232, 240);
     doc.line(14, 43, 196, 43);
@@ -453,13 +498,26 @@ export default function AttendanceTab({ logs = [], schedules = [], teacherUserId
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-4 relative z-10">
         <div className="flex flex-col lg:flex-row gap-2.5 items-center justify-between w-full">
           <div className="flex flex-wrap lg:flex-nowrap gap-2 w-full lg:flex-1 items-center min-w-0">
+            {/* Shortened input bar style parameters */}
             <input
               type="text"
               placeholder="Search student or course..."
-              className="flex-1 min-w-[140px] px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium outline-none focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/10 transition-all shadow-sm h-[38px]"
+              className="w-full sm:w-[180px] lg:w-[220px] shrink-0 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium outline-none focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/10 transition-all shadow-sm h-[38px]"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
+
+            <div className="w-full sm:w-[125px] shrink-0">
+              <FilterDropdown
+                options={dayOptions}
+                value={dayFilter}
+                onChange={setDayFilter}
+                placeholder="All Days"
+                allowClear={true}
+                clearText="Show All Days"
+                showSearch={false}
+              />
+            </div>
 
             <div className="w-full sm:w-[180px] lg:w-[210px] shrink-0">
               <FilterDropdown
@@ -478,18 +536,6 @@ export default function AttendanceTab({ logs = [], schedules = [], teacherUserId
               value={dateFilter}
               onChange={(e) => setDateFilter(e.target.value)}
             />
-
-            <div className="w-full sm:w-[125px] shrink-0">
-              <FilterDropdown
-                options={statusOptions}
-                value={statusFilter}
-                onChange={setStatusFilter}
-                placeholder="All Statuses"
-                allowClear={true}
-                clearText="Show All Statuses"
-                showSearch={false}
-              />
-            </div>
           </div>
 
           <div className="flex items-center gap-2 w-full lg:w-auto shrink-0 justify-end mt-2 lg:mt-0">
