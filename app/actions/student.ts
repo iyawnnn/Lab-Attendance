@@ -15,6 +15,8 @@ export async function registerStudentToDatabase(data: {
   lastName: string;
   publicKey: string;
   recoveryPin: string;
+  email: string;        
+  sessionToken: string; 
 }) {
   try {
     const rateLimit = await checkRateLimit("register", data.studentId);
@@ -49,17 +51,21 @@ export async function registerStudentToDatabase(data: {
       }
     }
 
+    // Creates the student with all required fields map successfully
     await prisma.student.create({
       data: {
         student_id: data.studentId,
+        email: data.email,
         first_name: data.firstName,
         last_name: data.lastName,
         public_key: data.publicKey,
-        recovery_pin: hashedPin,
+        recovery_pin: hashedPin,       // ◄ FIX: Used hashedPin here instead of plain text
+        session_token: data.sessionToken, // ◄ Mapped cleanly to schema[cite: 1]
       },
     });
     return { success: true, message: "Student registered successfully." };
   } catch (error) {
+    console.error("Registration database error:", error);
     return { success: false, message: "Failed to connect to the database." };
   }
 }

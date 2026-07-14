@@ -40,13 +40,15 @@ model Schedule {
 }
 
 model Student {
-  id           Int             @id @default(autoincrement())
-  student_id   String          @unique
-  first_name   String
-  last_name    String
-  public_key   String          
-  recovery_pin String          
-  attendances  AttendanceLog[]
+  id            Int             @id @default(autoincrement())
+  student_id    String          @unique
+  email         String          @unique
+  first_name    String
+  last_name     String
+  public_key    String          
+  session_token String?
+  recovery_pin  String          
+  attendances   AttendanceLog[]
 }
 
 model AttendanceLog {
