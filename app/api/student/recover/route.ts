@@ -1,84 +1,72 @@
-// app/api/student/recover/route.ts
-
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import bcrypt from "bcryptjs";
-import { checkRateLimit } from "@/lib/ratelimit";
+import { prisma } from "@/lib/db";
+import { randomUUID, createHash } from "crypto";
 
 export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-    const { studentId, pin, newPublicKey, newPin } = body;
+  console.log("[RECOVER_STEP_1] Verification handshake initiated.");
 
-    if (!studentId || !pin) {
+  try {
+    const { studentId, recoveryPin, publicKey } = await request.json();
+
+    if (!studentId || !recoveryPin || !publicKey) {
       return NextResponse.json(
-        { success: false, message: "Missing required recovery parameters." },
+        { success: false, message: "Missing required fields: Student ID, PIN, or Public Key." },
         { status: 400 }
       );
     }
 
-    const rateLimit = await checkRateLimit("recover", studentId);
-    if (!rateLimit.success) {
-      return NextResponse.json(
-        { success: false, message: rateLimit.message },
-        { status: 429 }
-      );
-    }
+    const cleanStudentId = String(studentId).trim();
 
-    const student = await db.student.findUnique({
-      where: { student_id: studentId },
+    const student = await prisma.student.findUnique({
+      where: { student_id: cleanStudentId },
     });
 
     if (!student) {
       return NextResponse.json(
-        { success: false, message: "Student ID not found in the system." },
+        { success: false, message: "No registered student matches this Student ID." },
         { status: 404 }
       );
     }
 
-    if (!student.recovery_pin) {
-      return NextResponse.json(
-        { success: false, message: "No recovery PIN set for this account. Please contact administrator." },
-        { status: 400 }
-      );
-    }
+    // Verify current PIN hash signature safely
+    const normalizedInput = String(recoveryPin).trim().padStart(6, "0");
+    const hashedInputPin = createHash("sha256").update(normalizedInput).digest("hex");
+    const dbHashPin = student.recovery_pin.trim();
 
-    const isPinValid = await bcrypt.compare(pin, student.recovery_pin);
-    if (!isPinValid) {
+    if (dbHashPin !== hashedInputPin) {
       return NextResponse.json(
-        { success: false, message: "Incorrect Current Security PIN." },
+        { success: false, message: "Incorrect Recovery PIN. Please try again." },
         { status: 401 }
       );
     }
 
-    const updateData: { public_key: string; recovery_pin?: string } = {
-      public_key: newPublicKey ? newPublicKey : "",
-    };
+    // Generate fresh session token to instantly drop the other terminal session binding[cite: 1]
+    const newSessionToken = randomUUID();
 
-    if (newPin && newPin.length === 4) {
-      const salt = await bcrypt.genSalt(10);
-      updateData.recovery_pin = await bcrypt.hash(newPin, salt);
-    }
-
-    await db.student.update({
-      where: { student_id: studentId },
-      data: updateData,
+    await prisma.student.update({
+      where: { student_id: cleanStudentId },
+      data: {
+        public_key: publicKey,
+        session_token: newSessionToken,
+      },
     });
 
+    console.log(`[EVADE_SUCCESS] Session token shifted for ID: ${cleanStudentId}. Previous terminal evicted.[cite: 1]`);
+
     return NextResponse.json(
-      { 
-        success: true, 
-        message: newPublicKey 
-          ? "Account recovered, device linked, and Security PIN updated successfully." 
-          : "Device access revoked successfully."
+      {
+        success: true,
+        message: "Identity verified. Previous device session evicted. Proceeding to PIN setup.[cite: 1]",
+        sessionToken: newSessionToken,
+        email: student.email,
+        firstName: student.first_name,
+        lastName: student.last_name,
       },
       { status: 200 }
     );
+
   } catch (error) {
-    console.error("Recovery API Error:", error);
-    return NextResponse.json(
-      { success: false, message: "Internal server error during recovery." },
-      { status: 500 }
-    );
+    console.error("[RECOVER_STEP_1] Internal server error:", error);
+    return NextResponse.json({ success: false, message: "Server error during verification." }, { status: 500 });
   }
 }

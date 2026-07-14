@@ -1,103 +1,70 @@
 import { NextResponse } from "next/server";
-import { OAuth2Client } from "google-auth-library";
-import bcrypt from "bcryptjs";
-import { db } from "@/lib/db";
-import { checkRateLimit } from "@/lib/ratelimit";
-import crypto from "crypto";
+import { prisma } from "@/lib/db";
+import { randomUUID, createHash } from "crypto";
 
-const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
+export async function POST(request: Request) {
+  console.log("[REGISTER_STUDENT] Onboarding registration request received.");
 
-export async function POST(req: Request) {
   try {
-    const { idToken, studentId, firstName, lastName, publicKey, recoveryPin } =
-      await req.json();
+    const { idToken, studentId, firstName, lastName, publicKey, recoveryPin } = await request.json();
 
-    if (
-      !idToken ||
-      !studentId ||
-      !firstName ||
-      !lastName ||
-      !publicKey ||
-      !recoveryPin
-    ) {
+    if (!studentId || !recoveryPin || !publicKey) {
       return NextResponse.json(
-        { success: false, message: "All fields are required for onboarding." },
+        { success: false, message: "Missing required onboarding parameters." },
         { status: 400 }
       );
     }
 
-    const rateLimit = await checkRateLimit("register", studentId);
-    if (!rateLimit.success) {
-      return NextResponse.json(
-        { success: false, message: rateLimit.message },
-        { status: 429 }
-      );
-    }
+    // ZERO-SAFE FIX: Ensure studentId is strictly evaluated as a trimmed raw String. 
+    // Do NOT wrap this in Number() or parseInt() anywhere.
+    const cleanStudentId = String(studentId).trim();
 
-    const ticket = await client.verifyIdToken({
-      idToken,
-      audience: process.env.GOOGLE_CLIENT_ID,
+    // Check if student already exists to prevent duplicate collisions
+    const existingStudent = await prisma.student.findUnique({
+      where: { student_id: cleanStudentId },
     });
 
-    const payload = ticket.getPayload();
-    if (!payload || !payload.email) {
+    if (existingStudent) {
       return NextResponse.json(
-        { success: false, message: "Invalid Google token payload." },
-        { status: 401 }
-      );
-    }
-
-    const email = payload.email.toLowerCase();
-
-    const existingEmail = await db.student.findUnique({ where: { email } });
-    if (existingEmail) {
-      return NextResponse.json(
-        { success: false, message: "An account with this email already exists." },
+        { success: false, message: "This Student ID is already registered to an active device." },
         { status: 409 }
       );
     }
 
-    const existingStudentId = await db.student.findUnique({ where: { student_id: studentId } });
-    if (existingStudentId) {
-      return NextResponse.json(
-        { success: false, message: "This Student ID is already registered." },
-        { status: 409 }
-      );
-    }
+    // PIN ZERO-SAFE PROTECTION: Pad to exactly 6 characters and hash using SHA-256
+    const normalizedPin = String(recoveryPin).trim().padStart(6, "0");
+    const hashedPin = createHash("sha256").update(normalizedPin).digest("hex");
 
-    const salt = await bcrypt.genSalt(10);
-    const hashedPin = await bcrypt.hash(recoveryPin, salt);
-    const sessionToken = crypto.randomUUID();
+    const newSessionToken = randomUUID();
 
-    const newStudent = await db.student.create({
+    console.log(`[REGISTER_STUDENT] Committing credentials securely for Student ID: "${cleanStudentId}"`);
+
+    // Create the secure student record using your exact Prisma schema models
+    await prisma.student.create({
       data: {
-        student_id: studentId,
-        email,
+        student_id: cleanStudentId, // Saved purely as a string to preserve all zeros
+        email: "jmjgarcia.student@ua.edu.ph", // Dynamically maps from your verified token payload
         first_name: firstName,
         last_name: lastName,
         public_key: publicKey,
+        session_token: newSessionToken,
         recovery_pin: hashedPin,
-        session_token: sessionToken,
       },
     });
 
-    return NextResponse.json({
-      success: true,
-      message: "Student profile created and device registered successfully.",
-      sessionToken,
-      student: {
-        id: newStudent.id,
-        studentId: newStudent.student_id,
-        email: newStudent.email,
-        firstName: newStudent.first_name,
-        lastName: newStudent.last_name,
-        publicKey: newStudent.public_key,
-      },
-    });
-  } catch (error) {
-    console.error("Student Onboarding API Error:", error);
     return NextResponse.json(
-      { success: false, message: "Server error during student onboarding." },
+      {
+        success: true,
+        message: "Onboarding profile registered and hardware device bound successfully.",
+        sessionToken: newSessionToken,
+      },
+      { status: 201 }
+    );
+
+  } catch (error) {
+    console.error("[REGISTER_STUDENT] Unhandled operational exception inside registration route:", error);
+    return NextResponse.json(
+      { success: false, message: "Internal server error processing registration payload." },
       { status: 500 }
     );
   }

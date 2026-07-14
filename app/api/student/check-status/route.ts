@@ -1,51 +1,85 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { prisma } from "@/lib/db";
 
-export async function GET(req: Request) {
+export async function GET(request: Request) {
+  console.log("[CHECK_STATUS] Real-time session validation polling triggered.");
+
   try {
-    const { searchParams } = new URL(req.url);
-    const studentId = searchParams.get("studentId");
-    const sessionToken = searchParams.get("sessionToken");
-    const devicePublicKey = searchParams.get("publicKey");
+    const { searchParams } = new URL(request.url);
+
+    const studentId = searchParams.get("studentId") || request.headers.get("x-student-id");
+    const sessionToken = searchParams.get("sessionToken") || request.headers.get("x-session-token");
+    const publicKey = searchParams.get("publicKey") || request.headers.get("x-public-key");
 
     if (!studentId) {
+      console.warn("[CHECK_STATUS] Status validation rejected due to missing studentId identifier.");
       return NextResponse.json(
-        { success: false, message: "Missing studentId parameter." },
+        { revoked: true, error: "Missing required parameter: studentId." },
         { status: 400 }
       );
     }
 
-    const student = await db.student.findUnique({
-      where: { student_id: studentId },
+    // ZERO-SAFE FIX: Isolate ID string strictly to execute lookups without stripping formatting zeros
+    const cleanStudentId = String(studentId).trim();
+    console.log(`[CHECK_STATUS] Checking validation parameters for Student ID: "${cleanStudentId}"`);
+
+    // Fetch the current state of the student record using Prisma ORM
+    const student = await prisma.student.findUnique({
+      where: { student_id: cleanStudentId },
     });
 
     if (!student) {
-      return NextResponse.json({
-        success: true,
-        isRevoked: true,
-        message: "Student record not found.",
-      });
+      console.warn(`[CHECK_STATUS] Identity lookup failed. No student record matches ID: ${cleanStudentId}`);
+      return NextResponse.json(
+        { revoked: true, error: "Student authorization signature record not found." },
+        { status: 401 }
+      );
     }
 
-    // Session is revoked if public key is cleared OR session token/public key no longer match DB
-    const isRevoked =
-      !student.public_key ||
-      student.public_key === "" ||
-      (sessionToken ? student.session_token !== sessionToken : false) ||
-      (devicePublicKey ? student.public_key !== devicePublicKey : false);
+    // Strict Single Active Session Enforcement validation layer[cite: 1]
+    if (sessionToken && student.session_token !== sessionToken) {
+      console.warn(
+        `[CHECK_STATUS] Session token mismatch on ID: ${cleanStudentId}. Client: ${sessionToken}, Database: ${student.session_token}`
+      );
+      return NextResponse.json(
+        { 
+          revoked: true, 
+          reason: "session_mismatch",
+          error: "Session revoked. A newer active session was initiated on another terminal.[cite: 1]" 
+        },
+        { status: 401 }
+      );
+    }
 
-    return NextResponse.json({
-      success: true,
-      isRevoked,
-      firstName: student.first_name,
-      lastName: student.last_name,
-      first_name: student.first_name,
-      last_name: student.last_name,
-      currentPublicKey: student.public_key || "",
-    });
-  } catch (error) {
+    // Cryptographic Device Binding tracking check layer
+    if (publicKey && student.public_key !== publicKey) {
+      console.warn(
+        `[CHECK_STATUS] Cryptographic binding signature shift detected for student ID: ${cleanStudentId}.`
+      );
+      return NextResponse.json(
+        { 
+          revoked: true, 
+          reason: "key_mismatch",
+          error: "Device binding altered. Cryptographic hardware signature mismatch." 
+        },
+        { status: 401 }
+      );
+    }
+
+    console.log(`[CHECK_STATUS] Structural integrity verified for Student ID: ${cleanStudentId}. Session is valid.`);
     return NextResponse.json(
-      { success: false, message: "Failed to check revocation status." },
+      { 
+        revoked: false, 
+        status: "active",
+        message: "Client hardware synchronization binding remains fully secure." 
+      },
+      { status: 200 }
+    );
+
+  } catch (error) {
+    console.error("[CHECK_STATUS] Internal parsing failure encountered during background validation pass:", error);
+    return NextResponse.json(
+      { revoked: true, error: "Internal operational exception monitored inside status router." },
       { status: 500 }
     );
   }

@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { get, set, del } from "idb-keyval";
 import { GoogleOAuthProvider, GoogleLogin } from "@react-oauth/google";
 import {
-  checkRevokedStatus,
   getLabRooms,
   submitAttendance,
   getServerTime,
@@ -31,7 +30,7 @@ const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
 
 function StudentPortalContent() {
   const [view, setView] = useState<
-    "loading" | "login" | "onboarding" | "attendance"
+    "loading" | "login" | "onboarding" | "attendance" | "recovery_verify" | "recovery_set_pin"
   >("loading");
 
   const [studentTab, setStudentTab] = useState<"checkin" | "history">("checkin");
@@ -43,7 +42,12 @@ function StudentPortalContent() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [recoveryPin, setRecoveryPin] = useState("");
+  const [newRecoveryPin, setNewRecoveryPin] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const [cachedSessionToken, setCachedSessionToken] = useState("");
+  const [cachedKeyPair, setCachedKeyPair] = useState<any>(null);
+  const [cachedPublicKeyBase64, setCachedPublicKeyBase64] = useState("");
 
   const [labRooms, setLabRooms] = useState<string[]>([]);
   const [selectedRoom, setSelectedRoom] = useState("");
@@ -92,30 +96,43 @@ function StudentPortalContent() {
       const privateKey = await get("student_private_key");
       const storedId = await get("student_id");
       const localPublicKey = await get("student_public_key");
+      const localSessionToken = await get("session_token");
 
       if (privateKey && storedId) {
-        const statusCheck = await checkRevokedStatus(storedId);
+        try {
+          const url = `/api/student/check-status?studentId=${encodeURIComponent(storedId)}&sessionToken=${encodeURIComponent(localSessionToken || "")}&publicKey=${encodeURIComponent(localPublicKey || "")}`;
 
-        const isKeyMismatched =
-          statusCheck.currentPublicKey &&
-          localPublicKey &&
-          statusCheck.currentPublicKey !== localPublicKey;
+          const checkRes = await fetch(url, {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              "x-student-id": storedId,
+              "x-session-token": localSessionToken || "",
+            },
+          });
 
-        if (statusCheck.isRevoked || isKeyMismatched) {
-          await del("student_private_key");
-          await del("student_id");
-          await del("student_public_key");
-          await del("session_token");
-          setView("login");
-          setIsError(true);
-          setMessage("Device access was revoked or transferred to another device.");
-          return;
+          if (checkRes.status === 401 || !checkRes.ok) {
+            await del("student_private_key");
+            await del("student_id");
+            await del("student_public_key");
+            await del("session_token");
+            setView("login");
+            setIsError(true);
+            setMessage("Session has expired or device binding access was transferred.");
+            return;
+          }
+
+          setRegisteredId(storedId);
+          setView("attendance");
+          fetchRooms();
+          fetchHistory(storedId);
+        } catch (err) {
+          console.error("Failed to execute initial network status validation pass:", err);
+          setRegisteredId(storedId);
+          setView("attendance");
+          fetchRooms();
+          fetchHistory(storedId);
         }
-
-        setRegisteredId(storedId);
-        setView("attendance");
-        fetchRooms();
-        fetchHistory(storedId);
       } else {
         setView("login");
       }
@@ -129,25 +146,37 @@ function StudentPortalContent() {
 
     async function verifyActiveSession() {
       if (document.visibilityState === "visible" && registeredId) {
-        const statusRes = await checkRevokedStatus(registeredId);
         const localPublicKey = await get("student_public_key");
+        const localSessionToken = await get("session_token");
 
-        const isKeyMismatched =
-          statusRes.currentPublicKey &&
-          localPublicKey &&
-          statusRes.currentPublicKey !== localPublicKey;
+        try {
+          const url = `/api/student/check-status?studentId=${encodeURIComponent(registeredId)}&sessionToken=${encodeURIComponent(localSessionToken || "")}&publicKey=${encodeURIComponent(localPublicKey || "")}`;
 
-        if (statusRes.isRevoked || isKeyMismatched) {
-          await del("student_private_key");
-          await del("student_id");
-          await del("student_public_key");
-          await del("session_token");
-          setRegisteredId(null);
-          setView("login");
-          setIsError(true);
-          setMessage(
-            "Device authorization revoked or transferred. Please sign in again."
-          );
+          const response = await fetch(url, {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              "x-student-id": registeredId,
+              "x-session-token": localSessionToken || "",
+            },
+          });
+
+          if (response.status === 401) {
+            console.warn("[SECURITY] Session token mismatch detected. Evicting local token context.");
+            await del("student_private_key");
+            await del("student_id");
+            await del("student_public_key");
+            await del("session_token");
+
+            setRegisteredId(null);
+            setView("login");
+            setIsError(true);
+            setMessage(
+              "Active session revoked. A newer login signature was initiated on another terminal."
+            );
+          }
+        } catch (error) {
+          console.error("Real-time session token status verification polling network error:", error);
         }
       }
     }
@@ -205,49 +234,50 @@ function StudentPortalContent() {
         body: JSON.stringify({ idToken: token }),
       });
 
-      const contentType = res.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        setIsError(true);
-        setMessage("Server returned a non-JSON response. Check API route path.");
-        setIsSubmitting(false);
-        return;
-      }
-
       const data = await res.json();
 
-      if (!res.ok || !data.success) {
+      if (!res.ok) {
         setIsError(true);
-        setMessage(data.message || "Google authentication rejected.");
+        setMessage(data.error || "Google authentication rejected.");
         setIsSubmitting(false);
         return;
       }
 
-      if (data.isRegistered && data.student && data.sessionToken) {
-        await set("student_id", data.student.studentId);
-        await set("session_token", data.sessionToken);
+      if (data.isRegistered && data.studentId) {
+        const privateKey = await get("student_private_key");
 
-        let privateKey = await get("student_private_key");
+        // If keys are missing, switch to verification screen without altering local storage
         if (!privateKey) {
-          const keyPair = await window.crypto.subtle.generateKey(
-            { name: "ECDSA", namedCurve: "P-256" },
-            false,
-            ["sign", "verify"]
-          );
-          privateKey = keyPair.privateKey;
-          await set("student_private_key", privateKey);
+          setStudentId(data.studentId);
+          setGoogleEmail(data.email || "");
+          setFirstName(data.firstName || "");
+          setLastName(data.lastName || "");
+
+          setView("recovery_verify");
+          setIsError(true);
+          setMessage("Device Re-authorization Required: This account is active on another terminal. Provide your PIN to complete the device transfer.");
+          setIsSubmitting(false);
+          return;
         }
 
-        setRegisteredId(data.student.studentId);
+        // If private key matches this terminal, sign in normally using the current token
+        await set("student_id", data.studentId);
+        await set("session_token", data.sessionToken);
+        if (data.publicKey) {
+          await set("student_public_key", data.publicKey);
+        }
+
+        setRegisteredId(data.studentId);
         setView("attendance");
         fetchRooms();
-        fetchHistory(data.student.studentId);
+        fetchHistory(data.studentId);
         return;
       }
 
-      if (!data.isRegistered && data.googleProfile) {
-        setGoogleEmail(data.googleProfile.email);
-        setFirstName(data.googleProfile.firstName);
-        setLastName(data.googleProfile.lastName);
+      if (!data.isRegistered && data.email) {
+        setGoogleEmail(data.email);
+        setFirstName(data.firstName || "");
+        setLastName(data.lastName || "");
         setView("onboarding");
       }
     } catch (error) {
@@ -323,6 +353,128 @@ function StudentPortalContent() {
       console.error("Onboarding Error:", error);
       setIsError(true);
       setMessage("Server error encountered during account onboarding.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  // Step 1 Recovery: Verifies credentials and drops active session on target device
+  async function handleRecoveryStep1Verify(e: React.FormEvent) {
+    e.preventDefault();
+
+    if (recoveryPin.length !== 6 || isNaN(Number(recoveryPin))) {
+      setIsError(true);
+      setMessage("Current Recovery PIN must be exactly 6 numeric digits.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setMessage("");
+    setIsError(false);
+
+    try {
+      const keyPair = await window.crypto.subtle.generateKey(
+        { name: "ECDSA", namedCurve: "P-256" },
+        false,
+        ["sign", "verify"]
+      );
+
+      const exportedPublicKey = await window.crypto.subtle.exportKey("spki", keyPair.publicKey);
+      const publicKeyArray = Array.from(new Uint8Array(exportedPublicKey));
+      const publicKeyBase64 = btoa(String.fromCharCode(...publicKeyArray));
+
+      const res = await fetch("/api/student/recover", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: studentId,
+          recoveryPin: recoveryPin,
+          publicKey: publicKeyBase64,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (data.success && data.sessionToken) {
+        setCachedSessionToken(data.sessionToken);
+        setCachedKeyPair(keyPair);
+        setCachedPublicKeyBase64(publicKeyBase64);
+
+        setGoogleEmail(data.email || googleEmail);
+        setFirstName(data.firstName || firstName);
+        setLastName(data.lastName || lastName);
+
+        setMessage("Verification Successful! Previous hardware terminal sessions dropped.");
+        setIsError(false);
+        setTimeout(() => {
+          setMessage("");
+          setView("recovery_set_pin");
+        }, 1200);
+      } else {
+        setIsError(true);
+        setMessage(data.message || "Recovery failed. Incorrect Student ID or PIN combination.");
+      }
+    } catch (error) {
+      console.error("Recovery Step 1 error:", error);
+      setIsError(true);
+      setMessage("An error occurred during account recovery validation.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  // Step 2 Recovery: Submits new PIN configuration to system
+  async function handleRecoveryStep2CommitPin(e: React.FormEvent) {
+    e.preventDefault();
+
+    if (!newRecoveryPin || newRecoveryPin.length !== 6 || isNaN(Number(newRecoveryPin))) {
+      setIsError(true);
+      setMessage("New Recovery PIN configuration must consist of exactly 6 numeric digits.");
+      return;
+    }
+
+    setIsSubmitting(true);
+    setMessage("");
+    setIsError(false);
+
+    try {
+      const res = await fetch("/api/student/update-pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentId: studentId,
+          newPin: newRecoveryPin,
+          sessionToken: cachedSessionToken,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        await set("student_private_key", cachedKeyPair.privateKey);
+        await set("student_id", studentId);
+        await set("student_public_key", cachedPublicKeyBase64);
+        await set("session_token", cachedSessionToken);
+
+        setRegisteredId(studentId);
+        setMessage("Account successfully recovered and PIN code updated!");
+        setRecoveryPin("");
+        setNewRecoveryPin("");
+
+        setTimeout(() => {
+          setMessage("");
+          setView("attendance");
+          fetchRooms();
+          fetchHistory(studentId);
+        }, 1200);
+      } else {
+        setIsError(true);
+        setMessage(data.message || "Failed to finalize PIN setup updates.");
+      }
+    } catch (error) {
+      console.error("Recovery Step 2 error:", error);
+      setIsError(true);
+      setMessage("An error occurred while writing PIN updates.");
     } finally {
       setIsSubmitting(false);
     }
@@ -548,6 +700,24 @@ function StudentPortalContent() {
                   Access is strictly restricted to valid @ua.edu.ph institutional addresses.
                 </p>
               </div>
+
+              <div className="mt-6 text-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setGoogleEmail("");
+                    setStudentId("");
+                    setFirstName("");
+                    setLastName("");
+                    setView("recovery_verify");
+                    setIsError(false);
+                    setMessage("");
+                  }}
+                  className="text-xs font-bold text-slate-400 hover:text-[#011B51] uppercase tracking-wider transition-all cursor-pointer underline underline-offset-4"
+                >
+                  Recover/Transfer Account to this Device
+                </button>
+              </div>
             </div>
           )}
 
@@ -657,6 +827,178 @@ function StudentPortalContent() {
             </div>
           )}
 
+          {view === "recovery_verify" && (
+            <div className="animate-in fade-in duration-500">
+              <div className="mb-8 lg:mb-10 text-center lg:text-left">
+                <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-[#011B51] uppercase tracking-tight">
+                  Device Authorization Transfer
+                </h2>
+                <div className="w-12 lg:w-16 h-1 lg:h-1.5 bg-[#FED702] mt-3 lg:mt-4 mb-2 lg:mb-3 rounded-full mx-auto lg:mx-0" />
+                <p className="text-slate-500 text-xs sm:text-sm font-semibold uppercase tracking-wide">
+                  Authenticate and clear previous active sessions to sync mappings.
+                </p>
+              </div>
+
+              <form
+                onSubmit={handleRecoveryStep1Verify}
+                className="space-y-4 lg:space-y-6"
+              >
+                <div>
+                  <label className="block text-[10px] sm:text-xs font-bold text-[#011B51] uppercase tracking-wide mb-1.5 lg:mb-2 ml-1">
+                    Student ID
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 2023001839"
+                    className="w-full px-4 lg:px-5 py-3.5 lg:py-4 rounded-xl bg-slate-50 border border-slate-200 outline-none text-sm sm:text-base font-medium focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all shadow-sm"
+                    value={studentId}
+                    onChange={(e) => setStudentId(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] sm:text-xs font-bold text-[#011B51] uppercase tracking-wide mb-1.5 lg:mb-2 ml-1">
+                    Current 6-Digit Recovery PIN
+                  </label>
+                  <input
+                    type="password"
+                    placeholder="Enter Current PIN"
+                    maxLength={6}
+                    pattern="\d{6}"
+                    title="Must be exactly 6 digits"
+                    className="w-full px-4 lg:px-5 py-3.5 lg:py-4 rounded-xl bg-slate-50 border border-slate-200 outline-none text-center text-lg sm:text-xl font-mono font-bold tracking-[0.3em] focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all shadow-sm"
+                    value={recoveryPin}
+                    onChange={(e) => setRecoveryPin(e.target.value.replace(/\D/g, ""))}
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full bg-[#011B51] hover:bg-[#022a7a] text-white font-bold py-3.5 lg:py-4 rounded-xl mt-6 lg:mt-8 transition-all shadow-md hover:shadow-lg lg:hover:-translate-y-0.5 border-b-4 border-[#A51A21] disabled:opacity-70 disabled:border-[#011B51] disabled:transform-none text-xs sm:text-sm uppercase tracking-wider cursor-pointer"
+                >
+                  {isSubmitting
+                    ? "Verifying..."
+                    : "Verify & Evict Other Terminal"}
+                </button>
+              </form>
+
+              <div className="mt-8 lg:mt-12 text-center border-t border-slate-100 pt-6 lg:pt-8">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setView("login");
+                    setMessage("");
+                    setIsError(false);
+                    setStudentId("");
+                    setRecoveryPin("");
+                    setNewRecoveryPin("");
+                  }}
+                  className="text-xs sm:text-sm font-bold text-slate-400 hover:text-[#011B51] uppercase tracking-wide transition-colors cursor-pointer"
+                >
+                  &larr; Back to Institutional Login
+                </button>
+              </div>
+            </div>
+          )}
+
+          {view === "recovery_set_pin" && (
+            <div className="animate-in fade-in duration-500">
+              <div className="mb-8 lg:mb-10 text-center lg:text-left">
+                <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-[#011B51] uppercase tracking-tight">
+                  Profile Recovery PIN Configuration
+                </h2>
+                <div className="w-12 lg:w-16 h-1 lg:h-1.5 bg-[#FED702] mt-3 lg:mt-4 mb-2 lg:mb-3 rounded-full mx-auto lg:mx-0" />
+                <p className="text-slate-500 text-xs sm:text-sm font-semibold uppercase tracking-wide">
+                  Terminal active. Complete your final PIN configuration mapping rules.
+                </p>
+              </div>
+
+              <form
+                onSubmit={handleRecoveryStep2CommitPin}
+                className="space-y-4 lg:space-y-6"
+              >
+                {googleEmail && (
+                  <div className="p-4 bg-slate-100 border border-slate-200 rounded-xl cursor-not-allowed opacity-80">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">
+                      Authenticated Email
+                    </p>
+                    <p className="text-sm font-bold text-slate-500">{googleEmail}</p>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-[10px] sm:text-xs font-bold text-[#011B51] uppercase tracking-wide mb-1.5 lg:mb-2 ml-1">
+                    Student ID
+                  </label>
+                  <input
+                    type="text"
+                    disabled
+                    className="w-full px-5 py-4 rounded-xl bg-slate-100 border border-slate-200 outline-none text-base font-medium text-slate-400 cursor-not-allowed"
+                    value={studentId}
+                  />
+                </div>
+
+                {googleEmail && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-[10px] sm:text-xs font-bold text-[#011B51] uppercase tracking-wide mb-1.5 lg:mb-2 ml-1">
+                        First Name
+                      </label>
+                      <input
+                        type="text"
+                        className="w-full px-5 py-4 rounded-xl bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed outline-none font-medium"
+                        value={firstName}
+                        disabled
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] sm:text-xs font-bold text-[#011B51] uppercase tracking-wide mb-1.5 lg:mb-2 ml-1">
+                        Last Name
+                      </label>
+                      <input
+                        type="text"
+                        className="w-full px-5 py-4 rounded-xl bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed outline-none font-medium"
+                        value={lastName}
+                        disabled
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-[10px] sm:text-xs font-bold text-[#011B51] uppercase tracking-wide mb-1.5 lg:mb-2 ml-1">
+                    Set Recovery PIN (6 Digits)
+                  </label>
+                  <input
+                    type="password"
+                    placeholder="Type New or Current 6-Digit PIN"
+                    maxLength={6}
+                    pattern="\d{6}"
+                    title="Must be exactly 6 digits"
+                    className="w-full px-4 lg:px-5 py-3.5 lg:py-4 rounded-xl bg-slate-50 border border-slate-200 outline-none text-center text-lg sm:text-xl font-mono font-bold tracking-[0.3em] focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all shadow-sm"
+                    value={newRecoveryPin}
+                    onChange={(e) => setNewRecoveryPin(e.target.value.replace(/\D/g, ""))}
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full bg-[#011B51] hover:bg-[#022a7a] text-white font-bold py-3.5 lg:py-4 rounded-xl mt-6 lg:mt-8 transition-all shadow-md hover:shadow-lg lg:hover:-translate-y-0.5 border-b-4 border-[#A51A21] disabled:opacity-70 disabled:border-[#011B51] disabled:transform-none text-xs sm:text-sm uppercase tracking-wider cursor-pointer"
+                >
+                  {isSubmitting
+                    ? "Finalizing PIN..."
+                    : "Confirm PIN & Complete Setup"}
+                </button>
+              </form>
+            </div>
+          )}
+
           {view === "attendance" && (
             <div className="animate-in fade-in duration-500">
               <div className="mb-6 text-center lg:text-left">
@@ -669,8 +1011,8 @@ function StudentPortalContent() {
                     type="button"
                     onClick={() => setStudentTab("checkin")}
                     className={`flex-1 py-2.5 rounded-lg text-xs font-extrabold uppercase tracking-wider transition-all cursor-pointer ${studentTab === "checkin"
-                        ? "bg-[#011B51] text-white shadow-md"
-                        : "text-slate-500 hover:text-[#011B51]"
+                      ? "bg-[#011B51] text-white shadow-md"
+                      : "text-slate-500 hover:text-[#011B51]"
                       }`}
                   >
                     Log Attendance
@@ -683,8 +1025,8 @@ function StudentPortalContent() {
                       if (registeredId) fetchHistory(registeredId);
                     }}
                     className={`flex-1 py-2.5 rounded-lg text-xs font-extrabold uppercase tracking-wider transition-all cursor-pointer ${studentTab === "history"
-                        ? "bg-[#011B51] text-white shadow-md"
-                        : "text-slate-500 hover:text-[#011B51]"
+                      ? "bg-[#011B51] text-white shadow-md"
+                      : "text-slate-500 hover:text-[#011B51]"
                       }`}
                   >
                     My History
@@ -830,8 +1172,8 @@ function StudentPortalContent() {
                                 </span>
                                 <span
                                   className={`px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider border ${isLate
-                                      ? "bg-amber-50 text-amber-800 border-amber-200"
-                                      : "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                    ? "bg-amber-50 text-amber-800 border-amber-200"
+                                    : "bg-emerald-50 text-emerald-800 border-emerald-200"
                                     }`}
                                 >
                                   {isLate ? "LATE" : "ON TIME"}
@@ -908,10 +1250,10 @@ function StudentPortalContent() {
           {message && (
             <div
               className={`mt-6 lg:mt-8 p-4 lg:p-5 rounded-xl text-center text-xs sm:text-sm font-bold uppercase tracking-wide border-2 ${isError
-                  ? "bg-rose-50 text-rose-700 border-rose-200"
-                  : message.includes("LATE")
-                    ? "bg-amber-50 text-amber-700 border-amber-200"
-                    : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                ? "bg-rose-50 text-rose-700 border-rose-200"
+                : message.includes("LATE")
+                  ? "bg-amber-50 text-amber-700 border-amber-200"
+                  : "bg-emerald-50 text-emerald-700 border-emerald-200"
                 }`}
             >
               {message}
