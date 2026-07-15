@@ -137,6 +137,9 @@ function StudentPortalContent() {
             await del("student_id");
             await del("student_public_key");
             await del("session_token");
+            if (typeof window !== "undefined") {
+              sessionStorage.removeItem("google_id_token");
+            }
             setView("login");
             setIsError(true);
             setMessage("Session has expired or device binding access was transferred.");
@@ -188,6 +191,9 @@ function StudentPortalContent() {
             await del("student_id");
             await del("student_public_key");
             await del("session_token");
+            if (typeof window !== "undefined") {
+              sessionStorage.removeItem("google_id_token");
+            }
 
             setRegisteredId(null);
             setView("login");
@@ -247,6 +253,9 @@ function StudentPortalContent() {
 
     const token = credentialResponse.credential;
     setGoogleIdToken(token);
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("google_id_token", token);
+    }
 
     try {
       const res = await fetch("/api/student/auth/google", {
@@ -322,6 +331,20 @@ function StudentPortalContent() {
     setIsError(false);
 
     try {
+      const tokenToUse =
+        googleIdToken ||
+        (typeof window !== "undefined"
+          ? sessionStorage.getItem("google_id_token")
+          : "") ||
+        "";
+
+      if (!tokenToUse) {
+        setIsError(true);
+        setMessage("Google token context expired. Please sign in again.");
+        setIsSubmitting(false);
+        return;
+      }
+
       const keyPair = await window.crypto.subtle.generateKey(
         { name: "ECDSA", namedCurve: "P-256" },
         false,
@@ -339,7 +362,7 @@ function StudentPortalContent() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          idToken: googleIdToken,
+          idToken: tokenToUse,
           studentId,
           firstName,
           lastName,
@@ -571,6 +594,9 @@ function StudentPortalContent() {
           await del("student_id");
           await del("student_public_key");
           await del("session_token");
+          if (typeof window !== "undefined") {
+            sessionStorage.removeItem("google_id_token");
+          }
           setView("login");
           setIsError(false);
           setMessage("Security key mismatch. Please authenticate again.");
@@ -590,6 +616,9 @@ function StudentPortalContent() {
     await del("student_id");
     await del("student_public_key");
     await del("session_token");
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem("google_id_token");
+    }
 
     setRegisteredId(null);
     setShowDeauthModal(false);
