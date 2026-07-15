@@ -10,21 +10,58 @@ import {
   assignTeacherToSchedule,
 } from "@/app/actions/schedule";
 import { Schedule } from "../types";
-import { usePusherEvent } from "@/hooks/usePusher"; // Integrated custom real-time hook[cite: 1]
+import { usePusherEvent } from "@/hooks/usePusher";
+
+// --- Predefined University of the Assumption Laboratory Rooms ---
+const UA_LAB_ROOMS = [
+  "C204 - ROBOTICS 1",
+  "C301 - CISCO LAB 1",
+  "P312 - COMPUTER LAB 6",
+  "C202 - COMPUTER LAB 2",
+  "C203 - COMPUTER LAB 3",
+  "C302 - MULTIMEDIA LAB"
+];
+
+// --- Core Helper Functions to Convert Browser Time (24h) to App Time (12h) ---
+function convert24To12(time24: string): string {
+  if (!time24) return "";
+  const [hoursStr, minutesStr] = time24.split(":");
+  let hours = parseInt(hoursStr, 10);
+  const minutes = minutesStr;
+  const period = hours >= 12 ? "PM" : "AM";
+
+  if (hours === 0) hours = 12;
+  else if (hours > 12) hours -= 12;
+
+  return `${hours}:${minutes}${period}`;
+}
+
+function convert12To24(time12: string): string {
+  const match = time12.trim().match(/(\d+):(\d+)\s*(AM|PM)/i);
+  if (!match) return "07:30"; // Fallback default
+  let hours = parseInt(match[1], 10);
+  const minutes = match[2];
+  const period = match[3].toUpperCase();
+
+  if (period === "PM" && hours !== 12) hours += 12;
+  if (period === "AM" && hours === 12) hours = 0;
+
+  return `${hours.toString().padStart(2, "0")}:${minutes}`;
+}
 
 // --- CUSTOM UI COMPONENT: Filter Dropdown ---
-function FilterDropdown({ 
-  options, 
-  value, 
-  onChange, 
-  placeholder, 
+function FilterDropdown({
+  options,
+  value,
+  onChange,
+  placeholder,
   allowClear = false,
   clearText = "Clear selection",
   showSearch = true
-}: { 
-  options: { id: string; label: string }[]; 
-  value: string; 
-  onChange: (val: string) => void; 
+}: {
+  options: { id: string; label: string }[];
+  value: string;
+  onChange: (val: string) => void;
   placeholder: string;
   allowClear?: boolean;
   clearText?: string;
@@ -46,7 +83,7 @@ function FilterDropdown({
 
   const filteredOptions = useMemo(() => {
     if (!showSearch) return options;
-    return options.filter(opt => 
+    return options.filter(opt =>
       opt.label.toLowerCase().includes(query.toLowerCase())
     );
   }, [options, query, showSearch]);
@@ -57,7 +94,7 @@ function FilterDropdown({
     <div ref={dropdownRef} className="relative w-full">
       <div
         onClick={() => setIsOpen(!isOpen)}
-        className={`w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100 border transition-all rounded-lg text-sm cursor-pointer flex justify-between items-center shadow-sm ${isOpen ? 'border-[#011B51] ring-2 ring-[#011B51]/10' : 'border-slate-200'}`}
+        className={`w-full px-4 py-2.5 bg-slate-50 hover:bg-slate-100 border transition-all rounded-lg text-sm cursor-pointer flex justify-between items-center shadow-sm h-[44px] ${isOpen ? 'border-[#011B51] ring-2 ring-[#011B51]/10' : 'border-slate-200'}`}
       >
         <span className={`truncate mr-2 ${selectedOption ? "text-slate-900 font-bold" : "text-slate-500 font-medium"}`}>
           {selectedOption ? selectedOption.label : placeholder}
@@ -82,19 +119,19 @@ function FilterDropdown({
           )}
           <div className="overflow-y-auto max-h-[200px] flex-1 p-1.5 custom-scrollbar">
             {allowClear && value && (
-               <div
-                 onClick={() => {
-                   onChange("");
-                   setIsOpen(false);
-                   setQuery("");
-                 }}
-                 className="px-3 py-2.5 mb-1 text-sm rounded-md cursor-pointer flex items-center gap-2 text-slate-500 hover:bg-slate-100 transition-colors"
-               >
-                 <X size={14} />
-                 <span className="italic">{clearText}</span>
-               </div>
+              <div
+                onClick={() => {
+                  onChange("");
+                  setIsOpen(false);
+                  setQuery("");
+                }}
+                className="px-3 py-2.5 mb-1 text-sm rounded-md cursor-pointer flex items-center gap-2 text-slate-500 hover:bg-slate-100 transition-colors"
+              >
+                <X size={14} />
+                <span className="italic">{clearText}</span>
+              </div>
             )}
-            
+
             {filteredOptions.length === 0 ? (
               <div className="p-4 text-xs font-bold uppercase tracking-widest text-slate-400 text-center">No matches found</div>
             ) : (
@@ -106,11 +143,10 @@ function FilterDropdown({
                     setIsOpen(false);
                     setQuery("");
                   }}
-                  className={`px-3 py-2.5 text-sm rounded-md cursor-pointer flex items-center justify-between transition-colors ${
-                    value === opt.id 
-                      ? 'bg-[#011B51]/5 text-[#011B51] font-bold' 
+                  className={`px-3 py-2.5 text-sm rounded-md cursor-pointer flex items-center justify-between transition-colors ${value === opt.id
+                      ? 'bg-[#011B51]/5 text-[#011B51] font-bold'
                       : 'hover:bg-slate-50 text-slate-700 font-medium'
-                  }`}
+                    }`}
                 >
                   <span className="truncate pr-4">{opt.label}</span>
                   {value === opt.id && <Check size={14} className="text-[#011B51] shrink-0" />}
@@ -131,37 +167,31 @@ interface SchedulesTabProps {
 }
 
 const dayOrder: Record<string, number> = {
-  "Monday": 1,
-  "Tuesday": 2,
-  "Wednesday": 3,
-  "Thursday": 4,
-  "Friday": 5,
-  "Saturday": 6,
-  "Sunday": 7
+  "Monday": 1, "Tuesday": 2, "Wednesday": 3, "Thursday": 4, "Friday": 5, "Saturday": 6, "Sunday": 7
 };
 
+// Parses a string schedule payload chronologically for UI order evaluation configurations
 function parseStartTime(timeStr: string) {
   if (!timeStr) return 0;
   const [start] = timeStr.split(/\s*-\s*/);
   if (!start) return 0;
   const match = start.trim().match(/(\d+):(\d+)\s*(AM|PM)/i);
   if (!match) return 0;
-  
+
   let hours = parseInt(match[1], 10);
   const minutes = parseInt(match[2], 10);
   const modifier = match[3].toUpperCase();
-  
+
   if (hours === 12) {
     hours = modifier === "AM" ? 0 : 12;
   } else if (modifier === "PM") {
     hours += 12;
   }
-  
+
   return hours * 60 + minutes;
 }
 
 export default function SchedulesTab({ schedules = [], teachers = [], refreshData }: SchedulesTabProps) {
-  // Filtering & Pagination State
   const [searchTerm, setSearchTerm] = useState("");
   const [dayFilter, setDayFilter] = useState("");
   const [roomFilter, setRoomFilter] = useState("");
@@ -169,25 +199,37 @@ export default function SchedulesTab({ schedules = [], teachers = [], refreshDat
   const [currentPage, setCurrentPage] = useState(1);
   const schedulesPerPage = 6;
 
-  // Modal States
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  
+
   const [formData, setFormData] = useState({
     lab_room: "",
     date: "Monday",
-    schedule: "",
     course_code: "",
     section: "",
   });
+
+  const [startTime24, setStartTime24] = useState("07:30");
+  const [endTime24, setEndTime24] = useState("09:30");
 
   const [assignScheduleId, setAssignScheduleId] = useState<number | null>(null);
   const [assignTeacherId, setAssignTeacherId] = useState<string>("");
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // --- Pusher Real-Time Background Synchronization ---
-  // Re-fetch server components data when any write mutator emits an event[cite: 1]
+  // Background view state layer scrolling lock layout engine triggers[cite: 1]
+  useEffect(() => {
+    if (isModalOpen || isAssignModalOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [isModalOpen, isAssignModalOpen]);
+
+  // Real-Time Pusher Sync Channel Wireframing Hooks[cite: 1]
   usePusherEvent("schedules-channel", "schedule-created", () => refreshData());
   usePusherEvent("schedules-channel", "schedule-updated", () => refreshData());
   usePusherEvent("schedules-channel", "schedule-deleted", () => refreshData());
@@ -196,63 +238,59 @@ export default function SchedulesTab({ schedules = [], teachers = [], refreshDat
   const uniqueRooms = Array.from(new Set(schedules.map(s => s.lab_room))).sort();
   const uniqueSections = Array.from(new Set(schedules.map(s => s.section))).sort();
 
-  // Mapped options for Dropdowns
   const dayOptions = uniqueDays.map(day => ({ id: day, label: day }));
-  const roomOptions = uniqueRooms.map(room => ({ id: room as string, label: room as string }));
+  const roomFilterOptions = uniqueRooms.map(room => ({ id: room as string, label: room as string }));
+  const modalRoomOptions = UA_LAB_ROOMS.map(room => ({ id: room, label: room }));
   const sectionOptions = uniqueSections.map(section => ({ id: section as string, label: section as string }));
-  const teacherOptions = teachers.map(teacher => ({ 
-    id: teacher.id.toString(), 
-    label: `${teacher.name} (ID: ${teacher.user_id})` 
+  const teacherOptions = teachers.map(teacher => ({
+    id: teacher.id.toString(),
+    label: `${teacher.name} (ID: ${teacher.user_id})`
   }));
 
-  // Reset to page 1 when any filter changes
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm, dayFilter, roomFilter, sectionFilter]);
 
-  // Combine Filtering and Sorting
   const filteredAndSortedSchedules = useMemo(() => {
     let result = schedules.filter((sched: any) => {
       const searchLower = searchTerm.toLowerCase();
       const courseMatch = sched.course_code.toLowerCase().includes(searchLower);
       const roomMatch = sched.lab_room.toLowerCase().includes(searchLower);
       const teacherMatch = sched.teacher?.name?.toLowerCase().includes(searchLower);
-      
+
       const matchesSearch = courseMatch || roomMatch || teacherMatch;
       const matchesDay = dayFilter === "" || sched.date === dayFilter;
       const matchesRoom = roomFilter === "" || sched.lab_room === roomFilter;
       const matchesSection = sectionFilter === "" || sched.section === sectionFilter;
-      
+
       return matchesSearch && matchesDay && matchesRoom && matchesSection;
     });
 
-    // Sort Chronologically: Day -> Time
     result.sort((a, b) => {
       const dayDiff = (dayOrder[a.date] || 99) - (dayOrder[b.date] || 99);
       if (dayDiff !== 0) return dayDiff;
-      
       return parseStartTime(a.schedule) - parseStartTime(b.schedule);
     });
 
     return result;
   }, [schedules, searchTerm, dayFilter, roomFilter, sectionFilter]);
 
-  // Pagination Calculation
   const totalPages = Math.max(1, Math.ceil(filteredAndSortedSchedules.length / schedulesPerPage));
   const paginatedSchedules = filteredAndSortedSchedules.slice(
-    (currentPage - 1) * schedulesPerPage, 
+    (currentPage - 1) * schedulesPerPage,
     currentPage * schedulesPerPage
   );
 
   function openCreateModal() {
     setEditingId(null);
     setFormData({
-      lab_room: uniqueRooms[0] as string || "P312 - Computer Lab 6",
+      lab_room: UA_LAB_ROOMS[0],
       date: "Monday",
-      schedule: "",
       course_code: "",
       section: "",
     });
+    setStartTime24("07:30");
+    setEndTime24("09:30");
     setIsModalOpen(true);
   }
 
@@ -261,10 +299,15 @@ export default function SchedulesTab({ schedules = [], teachers = [], refreshDat
     setFormData({
       lab_room: sched.lab_room,
       date: sched.date,
-      schedule: sched.schedule,
       course_code: sched.course_code,
       section: sched.section,
     });
+
+    const tokens = sched.schedule.split(/\s*-\s*/);
+    if (tokens.length === 2) {
+      setStartTime24(convert12To24(tokens[0]));
+      setEndTime24(convert12To24(tokens[1]));
+    }
     setIsModalOpen(true);
   }
 
@@ -278,10 +321,13 @@ export default function SchedulesTab({ schedules = [], teachers = [], refreshDat
     e.preventDefault();
     setIsProcessing(true);
 
+    const assembledSchedule = `${convert24To12(startTime24)} - ${convert24To12(endTime24)}`;
+    const payload = { ...formData, schedule: assembledSchedule };
+
     if (editingId) {
-      await updateSchedule(editingId, formData);
+      await updateSchedule(editingId, payload);
     } else {
-      await createSchedule(formData);
+      await createSchedule(payload);
     }
 
     setIsModalOpen(false);
@@ -304,7 +350,7 @@ export default function SchedulesTab({ schedules = [], teachers = [], refreshDat
 
     setIsProcessing(true);
     await assignTeacherToSchedule(assignScheduleId, Number(assignTeacherId));
-    
+
     setIsAssignModalOpen(false);
     setIsProcessing(false);
     refreshData();
@@ -312,13 +358,13 @@ export default function SchedulesTab({ schedules = [], teachers = [], refreshDat
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      
-      {/* Advanced Control Bar */}
+
+      {/* Filters Control Bar Layout Row */}
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col lg:flex-row gap-4 items-center justify-between z-10 relative">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full flex-1">
-          <input 
-            type="text" 
-            placeholder="Search course or instructor..." 
+          <input
+            type="text"
+            placeholder="Search course or instructor..."
             className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:border-[#011B51] transition-colors shadow-sm"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
@@ -333,7 +379,7 @@ export default function SchedulesTab({ schedules = [], teachers = [], refreshDat
             showSearch={false}
           />
           <FilterDropdown
-            options={roomOptions}
+            options={roomFilterOptions}
             value={roomFilter}
             onChange={setRoomFilter}
             placeholder="All Rooms"
@@ -351,16 +397,16 @@ export default function SchedulesTab({ schedules = [], teachers = [], refreshDat
         </div>
 
         <div className="flex items-center w-full lg:w-auto shrink-0 mt-4 lg:mt-0">
-          <button 
-            onClick={openCreateModal} 
-            className="w-full bg-[#011B51] hover:bg-[#022a7a] text-white font-bold py-2.5 px-6 rounded-lg text-xs uppercase tracking-wider transition-colors cursor-pointer border-b-2 border-[#A51A21] shadow-sm"
+          <button
+            onClick={openCreateModal}
+            className="w-full bg-[#011B51] hover:bg-[#022a7a] text-white font-bold py-2.5 px-6 rounded-lg text-xs uppercase tracking-wider transition-colors cursor-pointer border-b-2 border-[#A51A21] shadow-sm h-[44px]"
           >
             Add Schedule
           </button>
         </div>
       </div>
 
-      {/* Static Grid View */}
+      {/* Grid Configuration Cards layout mapping output */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 relative z-0">
         {paginatedSchedules.map((sched: any) => (
           <div key={sched.id} className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col h-full">
@@ -368,10 +414,10 @@ export default function SchedulesTab({ schedules = [], teachers = [], refreshDat
               <span className="bg-[#011B51]/10 text-[#011B51] text-[10px] font-black px-3 py-1.5 rounded-lg uppercase tracking-widest">{sched.date}</span>
               <span className="text-xs font-bold text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">{sched.schedule}</span>
             </div>
-            
+
             <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-1">{sched.course_code}</h3>
             <p className="text-sm font-bold text-[#A51A21] mb-4">Section {sched.section}</p>
-            
+
             <div className="space-y-2 mb-6 flex-1">
               <div className="flex items-center text-xs font-medium text-slate-600 gap-3 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
                 <FaDoorOpen className="text-[#011B51] text-base shrink-0" />
@@ -400,19 +446,14 @@ export default function SchedulesTab({ schedules = [], teachers = [], refreshDat
             </div>
           </div>
         ))}
-        {filteredAndSortedSchedules.length === 0 && (
-          <div className="col-span-full p-12 text-center text-xs font-bold text-slate-400 uppercase tracking-widest bg-white rounded-xl border border-slate-200 border-dashed">
-            No schedules found matching your filters.
-          </div>
-        )}
       </div>
 
-      {/* Pagination Controls */}
+      {/* Pagination control matrix bindings */}
       {filteredAndSortedSchedules.length > 0 && (
         <div className="flex justify-between px-2 py-4 bg-transparent items-center mt-2">
-          <button 
-            onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
-            disabled={currentPage === 1} 
+          <button
+            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
             className="px-5 py-2.5 text-[10px] font-bold text-[#011B51] uppercase tracking-widest bg-white border-2 border-slate-200 rounded-lg disabled:opacity-50 cursor-pointer shadow-sm hover:border-[#011B51]/30 transition-colors"
           >
             Previous
@@ -420,9 +461,9 @@ export default function SchedulesTab({ schedules = [], teachers = [], refreshDat
           <span className="text-xs font-black text-[#011B51] uppercase tracking-widest">
             Page {currentPage} of {totalPages}
           </span>
-          <button 
-            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} 
-            disabled={currentPage === totalPages} 
+          <button
+            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+            disabled={currentPage === totalPages}
             className="px-5 py-2.5 text-[10px] font-bold text-[#011B51] uppercase tracking-widest bg-white border-2 border-slate-200 rounded-lg disabled:opacity-50 cursor-pointer shadow-sm hover:border-[#011B51]/30 transition-colors"
           >
             Next
@@ -430,24 +471,32 @@ export default function SchedulesTab({ schedules = [], teachers = [], refreshDat
         </div>
       )}
 
-      {/* Create/Edit Modal */}
+      {/* Create / Edit Schedule Popover Dialog View Panel */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-[#011B51]/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-in zoom-in-95 duration-200 border-t-8 border-[#FED702] flex flex-col">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg animate-in zoom-in-95 duration-200 border-t-8 border-[#FED702] flex flex-col">
             <div className="px-6 py-5 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-xl">
               <h3 className="text-xl font-black text-[#011B51] uppercase tracking-tight">
                 {editingId ? "Edit Schedule" : "Add Schedule"}
               </h3>
               <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-[#011B51] font-black text-2xl cursor-pointer">&times;</button>
             </div>
-            
+
             <div className="p-6">
               <form onSubmit={handleSubmit} className="space-y-4">
+
+                {/* Laboratory Dropdown Form Field */}
                 <div>
-                  <label className="block text-[10px] font-bold text-[#011B51] uppercase tracking-widest mb-1.5 ml-1">Laboratory Room</label>
-                  <input type="text" required className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 outline-none text-sm font-medium focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all shadow-sm" value={formData.lab_room} onChange={(e) => setFormData({ ...formData, lab_room: e.target.value })} placeholder="e.g. C301 - CISCO LAB1" />
+                  <label className="block text-[10px] font-bold text-[#011B51] uppercase tracking-widest mb-1.5 ml-1">Laboratory Facility Room</label>
+                  <FilterDropdown
+                    options={modalRoomOptions}
+                    value={formData.lab_room}
+                    onChange={(val) => setFormData({ ...formData, lab_room: val })}
+                    placeholder="Select Laboratory Facility Room..."
+                  />
                 </div>
-                
+
+                {/* Corrected Row 2 Layout Matrix: Day of Week next to Course Code */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[10px] font-bold text-[#011B51] uppercase tracking-widest mb-1.5 ml-1">Day of Week</label>
@@ -460,23 +509,49 @@ export default function SchedulesTab({ schedules = [], teachers = [], refreshDat
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold text-[#011B51] uppercase tracking-widest mb-1.5 ml-1">Time Schedule</label>
-                    <input type="text" required className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 outline-none text-sm font-medium focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all shadow-sm" value={formData.schedule} onChange={(e) => setFormData({ ...formData, schedule: e.target.value })} placeholder="e.g. 9:30AM - 11:30AM" />
+                    <label className="block text-[10px] font-bold text-[#011B51] uppercase tracking-widest mb-1.5 ml-1">Course Code</label>
+                    <input
+                      type="text"
+                      required
+                      className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 outline-none text-sm font-medium focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all uppercase shadow-sm h-[44px]"
+                      value={formData.course_code}
+                      onChange={(e) => setFormData({ ...formData, course_code: e.target.value })}
+                      placeholder="e.g. C-PCEITEL2"
+                    />
                   </div>
                 </div>
 
+                {/* Corrected Row 3 Layout Matrix: Start Time next to End Time */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[10px] font-bold text-[#011B51] uppercase tracking-widest mb-1.5 ml-1">Course Code</label>
-                    <input type="text" required className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 outline-none text-sm font-medium focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all uppercase shadow-sm" value={formData.course_code} onChange={(e) => setFormData({ ...formData, course_code: e.target.value })} placeholder="e.g. C-PCEITEL2" />
+                    <label className="block text-[10px] font-bold text-[#011B51] uppercase tracking-widest mb-1.5 ml-1">Start Time</label>
+                    <input
+                      type="time"
+                      required
+                      className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 outline-none text-sm font-bold text-slate-800 focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all shadow-sm h-[44px] cursor-pointer"
+                      value={startTime24}
+                      onChange={(e) => setStartTime24(e.target.value)}
+                    />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-bold text-[#011B51] uppercase tracking-widest mb-1.5 ml-1">Section</label>
-                    <input type="text" required className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 outline-none text-sm font-medium focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all uppercase shadow-sm" value={formData.section} onChange={(e) => setFormData({ ...formData, section: e.target.value })} placeholder="e.g. IT 3A" />
+                    <label className="block text-[10px] font-bold text-[#011B51] uppercase tracking-wide mb-1.5 lg:mb-2 ml-1">End Time</label>
+                    <input
+                      type="time"
+                      required
+                      className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 outline-none text-sm font-bold text-slate-800 focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all shadow-sm h-[44px] cursor-pointer"
+                      value={endTime24}
+                      onChange={(e) => setEndTime24(e.target.value)}
+                    />
                   </div>
                 </div>
 
-                <div className="pt-4 mt-2">
+                {/* Section Field Form Block */}
+                <div>
+                  <label className="block text-[10px] font-bold text-[#011B51] uppercase tracking-widest mb-1.5 ml-1">Section</label>
+                  <input type="text" required className="w-full px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 outline-none text-sm font-medium focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all uppercase shadow-sm h-[44px]" value={formData.section} onChange={(e) => setFormData({ ...formData, section: e.target.value })} placeholder="e.g. IT 3A" />
+                </div>
+
+                <div className="pt-4">
                   <button type="submit" disabled={isProcessing} className="w-full bg-[#011B51] hover:bg-[#022a7a] text-white font-bold py-3.5 rounded-xl transition-all shadow-md border-b-4 border-[#A51A21] disabled:opacity-70 text-xs uppercase tracking-wider cursor-pointer">
                     {isProcessing ? "Saving..." : editingId ? "Save Changes" : "Create Schedule"}
                   </button>
@@ -487,7 +562,7 @@ export default function SchedulesTab({ schedules = [], teachers = [], refreshDat
         </div>
       )}
 
-      {/* Assign Instructor Modal */}
+      {/* Assign Instructor Modal Popup wrapper */}
       {isAssignModalOpen && (
         <div className="fixed inset-0 bg-[#011B51]/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-in zoom-in-95 duration-200 border-t-8 border-[#A51A21] flex flex-col">
@@ -498,7 +573,7 @@ export default function SchedulesTab({ schedules = [], teachers = [], refreshDat
               </div>
               <button onClick={() => setIsAssignModalOpen(false)} className="text-slate-400 hover:text-[#011B51] font-black text-2xl cursor-pointer">&times;</button>
             </div>
-            
+
             <div className="p-6">
               <form onSubmit={handleAssignTeacher} className="space-y-6">
                 <div>
