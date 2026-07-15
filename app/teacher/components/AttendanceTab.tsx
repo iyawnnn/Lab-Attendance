@@ -165,6 +165,13 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
 
   const logsPerPage = 10;
 
+  const currentDayOfWeek = useMemo(() => {
+    return new Date().toLocaleDateString("en-US", {
+      weekday: "long",
+      timeZone: "Asia/Manila"
+    });
+  }, []);
+
   useEffect(() => {
     setLogs(initialLogs);
   }, [initialLogs]);
@@ -181,11 +188,11 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
 
   usePusherEvent<any>("attendance-channel", "new-attendance", (newLog) => {
     setLogs((prev) => {
-      if (prev.some((log) => log.id === newLog.id)) {
+      // Robust type-safe duplication validation check across stringified IDs
+      if (prev.some((log) => String(log.id) === String(newLog.id))) {
         return prev;
       }
 
-      // Read explicit properties with fallbacks for safe parsing
       const firstName = newLog.studentFirstName || (newLog.studentName ? newLog.studentName.split(" ")[0] : "");
       const lastName = newLog.studentLastName || (newLog.studentName ? newLog.studentName.split(" ").slice(1).join(" ") : "");
 
@@ -261,11 +268,45 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
     }));
   }, [schedules, dayFilter]);
 
+  const manualScheduleOptions = useMemo(() => {
+    const todaysSchedules = schedules.filter(sched => {
+      if (!sched.date) return false;
+      if (sched.date.toLowerCase() === currentDayOfWeek.toLowerCase()) return true;
+      
+      if (!isNaN(Date.parse(sched.date))) {
+        const extractedDay = new Date(sched.date).toLocaleDateString("en-US", {
+          weekday: "long",
+          timeZone: "Asia/Manila"
+        });
+        return extractedDay.toLowerCase() === currentDayOfWeek.toLowerCase();
+      }
+      return false;
+    });
+
+    return todaysSchedules.map(sched => ({
+      id: sched.id.toString(),
+      label: `${sched.course_code} - Sec ${sched.section} (${sched.lab_room})`
+    }));
+  }, [schedules, currentDayOfWeek]);
+
   useEffect(() => {
     if (classFilter && !scheduleOptions.some(opt => opt.id === classFilter)) {
       setClassFilter("");
     }
   }, [dayFilter, scheduleOptions, classFilter]);
+
+  useEffect(() => {
+    if (manualScheduleId && !manualScheduleOptions.some(opt => opt.id === manualScheduleId)) {
+      setManualScheduleId("");
+    }
+  }, [manualScheduleOptions, manualScheduleId]);
+
+  useEffect(() => {
+    if (!showManualEntry) {
+      setManualScheduleId("");
+      setManualStudentId("");
+    }
+  }, [showManualEntry]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -327,13 +368,15 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
       scheduleId: parseInt(manualScheduleId),
       teacherUserId,
       status: manualStatus,
-    });
+    }) as any;
 
     if (response.success) {
       alert(response.message);
+      
+      // Let your Pusher websocket listener prepend the new log automatically to avoid double state insertions
       setManualStudentId("");
+      setManualScheduleId("");
       setShowManualEntry(false);
-      router.refresh();
     } else {
       alert(`Error: ${response.message}`);
     }
@@ -534,16 +577,16 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
     <div className="space-y-6 animate-in fade-in duration-300">
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-4 relative z-10">
         <div className="flex flex-col lg:flex-row gap-2.5 items-center justify-between w-full">
-          <div className="flex flex-wrap lg:flex-nowrap gap-2 w-full lg:flex-1 items-center min-w-0">
+          <div className="flex flex-wrap md:flex-nowrap gap-2 w-full lg:flex-1 items-center min-w-0">
             <input
               type="text"
               placeholder="Search student or course..."
-              className="w-full sm:w-[180px] lg:w-[220px] shrink-0 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium outline-none focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/10 transition-all shadow-sm h-[38px]"
+              className="w-full md:flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium outline-none focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/10 transition-all shadow-sm h-[38px]"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
 
-            <div className="w-full sm:w-[125px] shrink-0">
+            <div className="w-full md:w-[150px]">
               <FilterDropdown
                 options={dayOptions}
                 value={dayFilter}
@@ -555,7 +598,7 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
               />
             </div>
 
-            <div className="w-full sm:w-[180px] lg:w-[210px] shrink-0">
+            <div className="w-full md:flex-1">
               <FilterDropdown
                 options={scheduleOptions}
                 value={classFilter}
@@ -568,7 +611,7 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
 
             <input
               type="date"
-              className="w-full sm:w-[130px] shrink-0 px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium outline-none focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/10 transition-all text-slate-600 cursor-pointer shadow-sm h-[38px]"
+              className="w-full md:w-[160px] px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium outline-none focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/10 transition-all text-slate-600 cursor-pointer shadow-sm h-[38px]"
               value={dateFilter}
               onChange={(e) => setDateFilter(e.target.value)}
             />
@@ -621,7 +664,7 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
 
         {showManualEntry && (
           <form onSubmit={handleManualSubmit} className="mt-2 p-5 bg-blue-50/50 border border-blue-100 rounded-xl flex flex-col md:flex-row gap-4 items-end animate-in slide-in-from-top-2">
-            <div className="w-full md:w-[25%]">
+            <div className="w-full md:w-[35%]">
               <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 ml-1">
                 Student ID
               </label>
@@ -635,21 +678,21 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
               />
             </div>
             
-            <div className="w-full md:w-[40%]">
+            <div className="w-full md:w-[45%]">
               <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 ml-1">
-                Class Session
+                Class Session (Today: <span className="text-[#011B51]">{currentDayOfWeek}</span>)
               </label>
               <FilterDropdown
-                options={scheduleOptions}
+                options={manualScheduleOptions}
                 value={manualScheduleId}
                 onChange={setManualScheduleId}
-                placeholder="Search and choose a class..."
+                placeholder="Choose one of today's classes..."
               />
             </div>
 
-            <div className="w-full md:w-[15%]">
+            <div className="w-full md:w-[20%]">
               <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 ml-1">
-                Attendance Status
+                Status
               </label>
               <FilterDropdown
                 options={statusOptions}

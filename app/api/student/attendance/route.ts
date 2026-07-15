@@ -1,10 +1,9 @@
-// app/api/student/attendance/route.ts
-
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { db } from "@/lib/db";
 import { checkRateLimit } from "@/lib/ratelimit";
-import { pusherServer } from "@/lib/pusherServer"; // Integrated Pusher server instance
+import { pusherServer } from "@/lib/pusherServer";
+import { getCurrentPHTimeInMinutes, parseScheduleTime } from "@/app/actions/utils";
 
 function verifyEcdsaSignature(
   message: string,
@@ -63,9 +62,9 @@ export async function POST(req: Request) {
 
     if (!student.public_key || student.public_key === "") {
       return NextResponse.json(
-        {
-          success: false,
-          message: "DEVICE_REVOKED: Your device authorization has been revoked."
+        { 
+          success: false, 
+          message: "DEVICE_REVOKED: Your device authorization has been revoked." 
         },
         { status: 403 }
       );
@@ -127,20 +126,25 @@ export async function POST(req: Request) {
       );
     }
 
+    // Evaluate the submission time against schedule limits to determine late status
+    const currentMinutes = getCurrentPHTimeInMinutes();
+    const startMinutes = parseScheduleTime(matchedSchedule.schedule);
+    const lateThreshold = parseInt(process.env.LATE_THRESHOLD_MINUTES || "15", 10);
+    const attendanceStatus = currentMinutes > (startMinutes + lateThreshold) ? "LATE" : "ON_TIME";
+
     const newLog = await db.attendanceLog.create({
       data: {
         student_id: studentId,
         schedule_id: matchedSchedule.id,
-        status: "ON_TIME",
+        status: attendanceStatus,
         signature,
       },
     });
 
-    // Safely trigger real-time updates for dashboards
     try {
-      const studentDisplayName =
-        (student as any).name ||
-        `${(student as any).first_name || ""} ${(student as any).last_name || ""}`.trim() ||
+      const studentDisplayName = 
+        (student as any).name || 
+        `${(student as any).first_name || ""} ${(student as any).last_name || ""}`.trim() || 
         studentId;
 
       await pusherServer.trigger("attendance-channel", "new-attendance", {
@@ -149,7 +153,7 @@ export async function POST(req: Request) {
         studentFirstName: student.first_name,
         studentLastName: student.last_name,
         studentId: studentId,
-        status: "ON_TIME",
+        status: attendanceStatus,
         roomName: labRoom,
         courseCode: matchedSchedule.course_code,
         section: matchedSchedule.section,
@@ -166,9 +170,9 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("Attendance API Error:", error);
     return NextResponse.json(
-      {
-        success: false,
-        message: error?.message ? `Server Error: ${error.message}` : "Server error while processing attendance."
+      { 
+        success: false, 
+        message: error?.message ? `Server Error: ${error.message}` : "Server error while processing attendance." 
       },
       { status: 500 }
     );

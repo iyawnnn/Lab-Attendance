@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
 import { logAdminAction } from "./audit";
 import { checkRateLimit } from "@/lib/ratelimit";
+import { pusherServer } from "@/lib/pusherServer";
 
 export async function loginTeacher(userId: string, passwordString: string) {
   try {
@@ -67,26 +68,10 @@ export async function getTeacherDashboardData(teacherUserId: string) {
   }
 }
 
-// 🟢 NEW: Instantly kills an active PIN session in the database
-export async function clearSessionPin(scheduleId: number) {
-  try {
-    await prisma.schedule.update({
-      where: { id: scheduleId },
-      data: {
-        active_pin: null,
-        pin_expires_at: null,
-      },
-    });
-    return { success: true };
-  } catch (error) {
-    return { success: false, message: "Failed to stop session." };
-  }
-}
-
 export async function generateSessionPin(
   scheduleId: number,
   teacherUserId: string,
-  durationSeconds: number // 🟢 Pass the teacher's custom time here
+  durationSeconds: number = 60
 ) {
   try {
     const schedule = await prisma.schedule.findUnique({
@@ -97,14 +82,8 @@ export async function generateSessionPin(
       return { success: false, message: "Schedule not found." };
     }
 
-    // 1. Strictly enforce the 60s to 900s (15 min) limit on the backend
-    const safeDuration = Math.max(60, Math.min(durationSeconds, 900));
-
-    // 2. Generate 4-digit PIN (1000 - 9999)
     const pin = Math.floor(1000 + Math.random() * 9000).toString();
-    
-    // 3. Keep your 10-second network buffer for the database
-    const dbExpiresAt = new Date(Date.now() + (safeDuration + 10) * 1000);
+    const dbExpiresAt = new Date(Date.now() + (durationSeconds + 10) * 1000);
 
     await prisma.schedule.update({
       where: { id: scheduleId },
@@ -113,7 +92,7 @@ export async function generateSessionPin(
 
     await logAdminAction(
       "GENERATE_SESSION_PIN",
-      `Teacher generated a ${safeDuration}s PIN for room ${schedule.lab_room} (${schedule.course_code}).`,
+      `Teacher generated ${durationSeconds}s PIN for room ${schedule.lab_room} (${schedule.course_code}).`,
       String(scheduleId),
       teacherUserId
     );
@@ -121,11 +100,41 @@ export async function generateSessionPin(
     return {
       success: true,
       pin,
-      // 4. Return the exact time to the client UI so the countdown is perfectly accurate
-      expiresAt: new Date(Date.now() + safeDuration * 1000).toISOString(),
+      expiresAt: new Date(Date.now() + durationSeconds * 1000).toISOString(),
     };
   } catch (error) {
     return { success: false, message: "Failed to generate session PIN." };
+  }
+}
+
+export async function clearSessionPin(scheduleId: number) {
+  try {
+    const schedule = await prisma.schedule.findUnique({
+      where: { id: scheduleId },
+    });
+
+    if (!schedule) {
+      return { success: false, message: "Schedule not found." };
+    }
+
+    await prisma.schedule.update({
+      where: { id: scheduleId },
+      data: {
+        active_pin: null,
+        pin_expires_at: null,
+      },
+    });
+
+    return {
+      success: true,
+      message: "Verification session terminated successfully.",
+    };
+  } catch (error: any) {
+    console.error("Clear Session PIN Error:", error);
+    return {
+      success: false,
+      message: "Failed to terminate the verification session.",
+    };
   }
 }
 
@@ -207,7 +216,7 @@ export async function manuallyAdmitStudent(data: {
       };
     }
 
-    await prisma.attendanceLog.create({
+    const newLog = await prisma.attendanceLog.create({
       data: {
         student_id: data.studentId,
         schedule_id: data.scheduleId,
@@ -216,9 +225,35 @@ export async function manuallyAdmitStudent(data: {
       },
     });
 
+    try {
+      const studentDisplayName = `${student.first_name || ""} ${student.last_name || ""}`.trim() || data.studentId;
+      await pusherServer.trigger("attendance-channel", "new-attendance", {
+        id: newLog.id,
+        studentName: studentDisplayName,
+        studentFirstName: student.first_name,
+        studentLastName: student.last_name,
+        studentId: data.studentId,
+        status: data.status,
+        roomName: schedule.lab_room,
+        courseCode: schedule.course_code,
+        section: schedule.section,
+        createdAt: newLog.timestamp.toISOString(),
+      });
+    } catch (pusherError) {
+      console.error("[PUSHER ERROR] Failed real-time override broadcast:", pusherError);
+    }
+
     return {
       success: true,
       message: `Student ${data.studentId} has been manually admitted.`,
+      data: {
+        id: newLog.id,
+        timestamp: newLog.timestamp.toISOString(),
+        student: {
+          first_name: student.first_name,
+          last_name: student.last_name,
+        }
+      }
     };
   } catch (error) {
     return {
