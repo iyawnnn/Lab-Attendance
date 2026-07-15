@@ -2,12 +2,15 @@
 
 import { useState, useMemo, useEffect, useRef } from "react";
 import { FaEdit, FaTrash, FaDoorOpen, FaUserTie } from "react-icons/fa";
-import { Search, ChevronDown, Check, X } from "lucide-react";
+import { Search, ChevronDown, Check, X, Archive, RotateCcw } from "lucide-react";
 import {
   createSchedule,
   updateSchedule,
   deleteSchedule,
   assignTeacherToSchedule,
+  archiveSchedule,
+  unarchiveSchedule,
+  archiveAllSchedules,
 } from "@/app/actions/schedule";
 import { Schedule } from "../types";
 import { usePusherEvent } from "@/hooks/usePusher";
@@ -22,7 +25,6 @@ const UA_LAB_ROOMS = [
   "C302 - MULTIMEDIA LAB"
 ];
 
-// --- Core Helper Functions to Convert Browser Time (24h) to App Time (12h) ---
 function convert24To12(time24: string): string {
   if (!time24) return "";
   const [hoursStr, minutesStr] = time24.split(":");
@@ -49,7 +51,6 @@ function convert12To24(time12: string): string {
   return `${hours.toString().padStart(2, "0")}:${minutes}`;
 }
 
-// --- CUSTOM UI COMPONENT: Filter Dropdown ---
 function FilterDropdown({
   options,
   value,
@@ -170,7 +171,6 @@ const dayOrder: Record<string, number> = {
   "Monday": 1, "Tuesday": 2, "Wednesday": 3, "Thursday": 4, "Friday": 5, "Saturday": 6, "Sunday": 7
 };
 
-// Parses a string schedule payload chronologically for UI order evaluation configurations
 function parseStartTime(timeStr: string) {
   if (!timeStr) return 0;
   const [start] = timeStr.split(/\s*-\s*/);
@@ -192,6 +192,7 @@ function parseStartTime(timeStr: string) {
 }
 
 export default function SchedulesTab({ schedules = [], teachers = [], refreshData }: SchedulesTabProps) {
+  const [showArchived, setShowArchived] = useState(false); // 🟢 Tracks Active vs. Archive views
   const [searchTerm, setSearchTerm] = useState("");
   const [dayFilter, setDayFilter] = useState("");
   const [roomFilter, setRoomFilter] = useState("");
@@ -217,7 +218,6 @@ export default function SchedulesTab({ schedules = [], teachers = [], refreshDat
   const [assignTeacherId, setAssignTeacherId] = useState<string>("");
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Background view state layer scrolling lock layout engine triggers[cite: 1]
   useEffect(() => {
     if (isModalOpen || isAssignModalOpen) {
       document.body.style.overflow = "hidden";
@@ -229,7 +229,7 @@ export default function SchedulesTab({ schedules = [], teachers = [], refreshDat
     };
   }, [isModalOpen, isAssignModalOpen]);
 
-  // Real-Time Pusher Sync Channel Wireframing Hooks[cite: 1]
+  // Real-Time Pusher Sync Channel Wireframing Hooks
   usePusherEvent("schedules-channel", "schedule-created", () => refreshData());
   usePusherEvent("schedules-channel", "schedule-updated", () => refreshData());
   usePusherEvent("schedules-channel", "schedule-deleted", () => refreshData());
@@ -247,9 +247,10 @@ export default function SchedulesTab({ schedules = [], teachers = [], refreshDat
     label: `${teacher.name} (ID: ${teacher.user_id})`
   }));
 
+  // Reset pagination when searching or toggling archiving
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, dayFilter, roomFilter, sectionFilter]);
+  }, [searchTerm, dayFilter, roomFilter, sectionFilter, showArchived]);
 
   const filteredAndSortedSchedules = useMemo(() => {
     let result = schedules.filter((sched: any) => {
@@ -262,8 +263,11 @@ export default function SchedulesTab({ schedules = [], teachers = [], refreshDat
       const matchesDay = dayFilter === "" || sched.date === dayFilter;
       const matchesRoom = roomFilter === "" || sched.lab_room === roomFilter;
       const matchesSection = sectionFilter === "" || sched.section === sectionFilter;
+      
+      // 🟢 Filter schedule records matches active/archived state toggle
+      const matchesArchiveState = (sched.is_archived ?? false) === showArchived;
 
-      return matchesSearch && matchesDay && matchesRoom && matchesSection;
+      return matchesSearch && matchesDay && matchesRoom && matchesSection && matchesArchiveState;
     });
 
     result.sort((a, b) => {
@@ -273,7 +277,7 @@ export default function SchedulesTab({ schedules = [], teachers = [], refreshDat
     });
 
     return result;
-  }, [schedules, searchTerm, dayFilter, roomFilter, sectionFilter]);
+  }, [schedules, searchTerm, dayFilter, roomFilter, sectionFilter, showArchived]);
 
   const totalPages = Math.max(1, Math.ceil(filteredAndSortedSchedules.length / schedulesPerPage));
   const paginatedSchedules = filteredAndSortedSchedules.slice(
@@ -344,6 +348,37 @@ export default function SchedulesTab({ schedules = [], teachers = [], refreshDat
     }
   }
 
+  // 🟢 Handles manual archiving of a single class
+  async function handleArchive(id: number) {
+    if (confirm("Are you sure you want to archive this schedule? It can be restored later.")) {
+      setIsProcessing(true);
+      const res = await archiveSchedule(id);
+      setIsProcessing(false);
+      if (res.success) refreshData();
+      else alert(res.message);
+    }
+  }
+
+  // 🟢 Restores an archived class back to active state
+  async function handleRestore(id: number) {
+    setIsProcessing(true);
+    const res = await unarchiveSchedule(id);
+    setIsProcessing(false);
+    if (res.success) refreshData();
+    else alert(res.message);
+  }
+
+  // 🟢 Archives all schedules in the current semester
+  async function handleArchiveAll() {
+    if (confirm("Are you sure you want to archive ALL active classes? This will refresh the active scheduler for the next academic term.")) {
+      setIsProcessing(true);
+      const res = await archiveAllSchedules();
+      setIsProcessing(false);
+      if (res.success) refreshData();
+      else alert(res.message);
+    }
+  }
+
   async function handleAssignTeacher(e: React.FormEvent) {
     e.preventDefault();
     if (!assignScheduleId || !assignTeacherId) return;
@@ -358,6 +393,43 @@ export default function SchedulesTab({ schedules = [], teachers = [], refreshDat
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
+
+      {/* 🟢 VIEW SWITCHER & GLOBAL ARCHIVE ACTION BAR */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-slate-50 p-3.5 rounded-xl border border-slate-200 shadow-sm">
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowArchived(false)}
+            className={`px-5 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+              !showArchived
+                ? "bg-[#011B51] text-white shadow-md border-b-2 border-[#A51A21]"
+                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+            }`}
+          >
+            Active Schedules ({schedules.filter(s => !s.is_archived).length})
+          </button>
+          <button
+            onClick={() => setShowArchived(true)}
+            className={`px-5 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+              showArchived
+                ? "bg-[#011B51] text-white shadow-md border-b-2 border-[#A51A21]"
+                : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"
+            }`}
+          >
+            Archived History ({schedules.filter(s => s.is_archived).length})
+          </button>
+        </div>
+
+        {/* Global Archive action is rendered ONLY inside Active schedules view panel */}
+        {!showArchived && schedules.filter(s => !s.is_archived).length > 0 && (
+          <button
+            onClick={handleArchiveAll}
+            disabled={isProcessing}
+            className="w-full sm:w-auto px-5 py-2.5 bg-[#A51A21] hover:bg-[#851319] text-white text-xs font-black uppercase tracking-wider rounded-lg border-b-2 border-[#011B51] transition-all shadow-sm cursor-pointer disabled:opacity-50"
+          >
+            Archive All Classes
+          </button>
+        )}
+      </div>
 
       {/* Filters Control Bar Layout Row */}
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col lg:flex-row gap-4 items-center justify-between z-10 relative">
@@ -409,7 +481,15 @@ export default function SchedulesTab({ schedules = [], teachers = [], refreshDat
       {/* Grid Configuration Cards layout mapping output */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 relative z-0">
         {paginatedSchedules.map((sched: any) => (
-          <div key={sched.id} className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col h-full">
+          <div key={sched.id} className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col h-full relative">
+            
+            {/* Archived Label Ribbon Indicator */}
+            {sched.is_archived && (
+              <span className="absolute top-0 right-6 bg-slate-500 text-white text-[9px] font-black px-2.5 py-1 rounded-b-md uppercase tracking-wider shadow-sm">
+                Archived
+              </span>
+            )}
+
             <div className="flex justify-between items-start mb-4">
               <span className="bg-[#011B51]/10 text-[#011B51] text-[10px] font-black px-3 py-1.5 rounded-lg uppercase tracking-widest">{sched.date}</span>
               <span className="text-xs font-bold text-slate-500 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">{sched.schedule}</span>
@@ -430,17 +510,33 @@ export default function SchedulesTab({ schedules = [], teachers = [], refreshDat
                     {sched.teacher ? sched.teacher.name : "Unassigned"}
                   </span>
                 </div>
-                <button onClick={() => openAssignModal(sched)} className="text-[10px] font-black uppercase tracking-widest text-[#011B51] hover:underline cursor-pointer ml-2 shrink-0">
-                  {sched.teacher ? "Change" : "Assign"}
-                </button>
+                {!sched.is_archived && (
+                  <button onClick={() => openAssignModal(sched)} className="text-[10px] font-black uppercase tracking-widest text-[#011B51] hover:underline cursor-pointer ml-2 shrink-0">
+                    {sched.teacher ? "Change" : "Assign"}
+                  </button>
+                )}
               </div>
             </div>
 
-            <div className="pt-4 border-t border-slate-100 flex justify-end gap-2">
-              <button onClick={() => openEditModal(sched)} className="px-3 py-2 text-slate-500 hover:text-[#011B51] hover:bg-slate-100 rounded-lg transition-colors cursor-pointer flex items-center gap-2 text-xs font-bold uppercase tracking-widest border border-slate-200 shadow-sm">
-                <FaEdit /> Edit
-              </button>
-              <button onClick={() => handleDelete(sched.id)} disabled={isProcessing} className="px-3 py-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-2 text-xs font-bold uppercase tracking-widest border border-slate-200 shadow-sm">
+            <div className="pt-4 border-t border-slate-100 flex justify-end gap-2 flex-wrap">
+              {!sched.is_archived ? (
+                <>
+                  <button onClick={() => openEditModal(sched)} className="px-3 py-2 text-slate-500 hover:text-[#011B51] hover:bg-slate-100 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest border border-slate-200 shadow-sm">
+                    <FaEdit /> Edit
+                  </button>
+                  {/* 🟢 Single Class Archive Button */}
+                  <button onClick={() => handleArchive(sched.id)} disabled={isProcessing} className="px-3 py-2 text-slate-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest border border-slate-200 shadow-sm">
+                    <Archive size={12} /> Archive
+                  </button>
+                </>
+              ) : (
+                /* 🟢 Single Class Restore Button (Shown in Archive Mode) */
+                <button onClick={() => handleRestore(sched.id)} disabled={isProcessing} className="px-3 py-2 text-[#011B51] hover:bg-slate-100 rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5 text-xs font-black uppercase tracking-widest border border-slate-200 shadow-sm bg-slate-50">
+                  <RotateCcw size={12} /> Restore Class
+                </button>
+              )}
+
+              <button onClick={() => handleDelete(sched.id)} disabled={isProcessing} className="px-3 py-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer disabled:opacity-50 flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest border border-slate-200 shadow-sm">
                 <FaTrash /> Delete
               </button>
             </div>

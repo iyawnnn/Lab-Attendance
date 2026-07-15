@@ -11,10 +11,21 @@ async function main() {
   // 1. Wipe existing data to prevent relational conflicts
   await prisma.attendanceLog.deleteMany();
   await prisma.schedule.deleteMany();
+  await prisma.academicTerm.deleteMany(); // Clears old terms during wipe
   await prisma.user.deleteMany();
   await prisma.student.deleteMany();
 
   console.log('Database wiped successfully.');
+
+  // Create the active academic term first so schedules have a relation ID
+  console.log('Generating active academic term...');
+  const activeTerm = await prisma.academicTerm.create({
+    data: {
+      semester: "First Semester",
+      school_year: "2026-2027",
+      is_active: true,
+    }
+  });
 
   // 2. Read and parse the schedules.json file
   const schedulesPath = path.join(process.cwd(), 'schedules.json');
@@ -76,6 +87,7 @@ async function main() {
         course_code: item.course_code,
         section: item.section,
         teacher_id: teacherDbId || null,
+        term_id: activeTerm.id, // Assigns the created academic term ID to this schedule
       }
     });
 

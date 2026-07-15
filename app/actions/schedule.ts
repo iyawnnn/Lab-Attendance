@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/db";
 import { logAdminAction } from "./audit";
-import { pusherServer } from "@/lib/pusherServer"; // Integrated Pusher server instance[cite: 1]
+import { pusherServer } from "@/lib/pusherServer"; // Integrated Pusher server instance
 
 export async function createSchedule(data: {
   lab_room: string;
@@ -12,6 +12,16 @@ export async function createSchedule(data: {
   section: string;
 }) {
   try {
+    // 🟢 1. Retrieve the currently active academic semester term
+    const activeTerm = await prisma.academicTerm.findFirst({
+      where: { is_active: true },
+    });
+
+    if (!activeTerm) {
+      return { success: false, message: "No active academic term found. Please configure a semester first." };
+    }
+
+    // 🟢 2. Link the term_id to the created schedule
     const newSchedule = await prisma.schedule.create({
       data: {
         lab_room: data.lab_room,
@@ -19,6 +29,8 @@ export async function createSchedule(data: {
         schedule: data.schedule,
         course_code: data.course_code,
         section: data.section,
+        term_id: activeTerm.id, // Binds class to the active term
+        is_archived: false,      // Active by default
       },
     });
 
@@ -28,7 +40,7 @@ export async function createSchedule(data: {
       data.course_code
     );
 
-    // Safely trigger real-time sync[cite: 1]
+    // Safely trigger real-time sync
     try {
       await pusherServer.trigger("schedules-channel", "schedule-created", {
         id: newSchedule.id,
@@ -73,7 +85,7 @@ export async function updateSchedule(
       String(id)
     );
 
-    // Safely trigger real-time sync[cite: 1]
+    // Safely trigger real-time sync
     try {
       await pusherServer.trigger("schedules-channel", "schedule-updated", {
         id,
@@ -100,7 +112,7 @@ export async function deleteSchedule(id: number) {
       String(id)
     );
 
-    // Safely trigger real-time sync[cite: 1]
+    // Safely trigger real-time sync
     try {
       await pusherServer.trigger("schedules-channel", "schedule-deleted", {
         id,
@@ -131,7 +143,7 @@ export async function assignTeacherToSchedule(
       String(scheduleId)
     );
 
-    // Safely trigger real-time sync[cite: 1]
+    // Safely trigger real-time sync
     try {
       await pusherServer.trigger("schedules-channel", "schedule-updated", {
         id: scheduleId,
@@ -166,7 +178,7 @@ export async function assignTeacherToMultipleSchedules(
       String(teacherId)
     );
 
-    // Safely trigger real-time sync[cite: 1]
+    // Safely trigger real-time sync
     try {
       await pusherServer.trigger("schedules-channel", "schedule-updated", {
         ids: scheduleIds,
@@ -195,7 +207,7 @@ export async function removeTeacherFromSchedule(scheduleId: number) {
       String(scheduleId)
     );
 
-    // Safely trigger real-time sync[cite: 1]
+    // Safely trigger real-time sync
     try {
       await pusherServer.trigger("schedules-channel", "schedule-updated", {
         id: scheduleId,
@@ -208,5 +220,93 @@ export async function removeTeacherFromSchedule(scheduleId: number) {
     return { success: true, message: "Class removed from instructor." };
   } catch (error) {
     return { success: false, message: "Failed to remove class." };
+  }
+}
+
+// 🟢 NEW: ARCHIVE SINGLE SCHEDULE
+export async function archiveSchedule(id: number) {
+  try {
+    await prisma.schedule.update({
+      where: { id },
+      data: { is_archived: true },
+    });
+
+    await logAdminAction(
+      "ARCHIVE_SCHEDULE",
+      `Archived class schedule ID ${id}.`,
+      String(id)
+    );
+
+    try {
+      await pusherServer.trigger("schedules-channel", "schedule-updated", { id });
+    } catch (e) {
+      console.error("Pusher trigger error:", e);
+    }
+
+    return { success: true, message: "Class successfully archived." };
+  } catch (error) {
+    return { success: false, message: "Failed to archive schedule." };
+  }
+}
+
+// 🟢 NEW: UNARCHIVE SINGLE SCHEDULE (RESTORE)
+export async function unarchiveSchedule(id: number) {
+  try {
+    await prisma.schedule.update({
+      where: { id },
+      data: { is_archived: false },
+    });
+
+    await logAdminAction(
+      "UNARCHIVE_SCHEDULE",
+      `Restored archived class schedule ID ${id}.`,
+      String(id)
+    );
+
+    try {
+      await pusherServer.trigger("schedules-channel", "schedule-updated", { id });
+    } catch (e) {
+      console.error("Pusher trigger error:", e);
+    }
+
+    return { success: true, message: "Class successfully restored." };
+  } catch (error) {
+    return { success: false, message: "Failed to restore schedule." };
+  }
+}
+
+// 🟢 NEW: ARCHIVE ALL SCHEDULES IN THE ACTIVE SEMESTER
+export async function archiveAllSchedules() {
+  try {
+    const activeTerm = await prisma.academicTerm.findFirst({
+      where: { is_active: true },
+    });
+
+    if (!activeTerm) {
+      return { success: false, message: "No active academic term found." };
+    }
+
+    const result = await prisma.schedule.updateMany({
+      where: {
+        term_id: activeTerm.id,
+        is_archived: false,
+      },
+      data: { is_archived: true },
+    });
+
+    await logAdminAction(
+      "ARCHIVE_ALL_SCHEDULES",
+      `Archived all ${result.count} active schedules in term ${activeTerm.semester} (${activeTerm.school_year}).`
+    );
+
+    try {
+      await pusherServer.trigger("schedules-channel", "schedule-updated", { all: true });
+    } catch (e) {
+      console.error("Pusher trigger error:", e);
+    }
+
+    return { success: true, message: `Successfully archived all ${result.count} active classes.` };
+  } catch (error) {
+    return { success: false, message: "Failed to archive schedules." };
   }
 }
