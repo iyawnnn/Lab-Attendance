@@ -6,6 +6,7 @@ import { Search, ChevronDown, Check, X, FileText, Download } from "lucide-react"
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { AttendanceLog, Schedule } from "../types";
+import { usePusherEvent } from "@/hooks/usePusher"; // Integrated clean real-time hook[cite: 1]
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -128,8 +129,10 @@ function FilterDropdown({
   );
 }
 
-export default function AttendanceTab({ logs, schedules }: { logs: AttendanceLog[], schedules: Schedule[] }) {
+export default function AttendanceTab({ logs: initialLogs, schedules }: { logs: AttendanceLog[], schedules: Schedule[] }) {
   const router = useRouter();
+  const [logs, setLogs] = useState<AttendanceLog[]>(initialLogs); // Maintain stateful copy for live prepend[cite: 1]
+  
   const [searchQuery, setSearchQuery] = useState("");
   const [dateFilter, setDateFilter] = useState("");
   const [courseFilter, setCourseFilter] = useState("");
@@ -143,16 +146,55 @@ export default function AttendanceTab({ logs, schedules }: { logs: AttendanceLog
 
   const itemsPerPage = 10;
 
-  // Real-time background sync every 4 seconds
+  // Keep state synchronized with server action data transitions or router navigations
+  useEffect(() => {
+    setLogs(initialLogs);
+  }, [initialLogs]);
+
+  // Real-time background sync safety relaxed to 30s as Websockets are now instantaneous[cite: 1]
   useEffect(() => {
     const interval = setInterval(() => {
       if (document.visibilityState === "visible") {
         router.refresh();
       }
-    }, 4000);
+    }, 30000);
 
     return () => clearInterval(interval);
   }, [router]);
+
+  // Listen to live student check-ins and update the state in real time[cite: 1]
+  usePusherEvent<any>("attendance-channel", "new-attendance", (newLog) => {
+    setLogs((prev) => {
+      // Prevent duplicate rendering issues if router.refresh() occurs concurrently
+      if (prev.some((log) => log.id === newLog.id)) {
+        return prev;
+      }
+
+      // Convert the incoming single student name payload back into first/last name
+      const nameParts = newLog.studentName ? newLog.studentName.split(" ") : ["", ""];
+      const first_name = nameParts[0] || "";
+      const last_name = nameParts.slice(1).join(" ") || "";
+
+      const formattedLog: AttendanceLog = {
+        id: newLog.id,
+        timestamp: newLog.createdAt || new Date().toISOString(),
+        status: newLog.status || "ON_TIME",
+        signature: newLog.signature || "",
+        student: {
+          student_id: newLog.studentId,
+          first_name: first_name,
+          last_name: last_name,
+        } as any,
+        schedule: {
+          course_code: newLog.courseCode,
+          section: newLog.section,
+          lab_room: newLog.roomName,
+        } as any
+      };
+
+      return [formattedLog, ...prev];
+    });
+  });
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {

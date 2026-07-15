@@ -8,6 +8,9 @@ export function usePusherEvent<T>(
   callback: (data: T) => void
 ) {
   useEffect(() => {
+    // Safety guard: do not execute on server side or if initialization isn't ready
+    if (!pusherClient) return;
+
     const channel = pusherClient.subscribe(channelName);
     channel.bind(eventName, callback);
 

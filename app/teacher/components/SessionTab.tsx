@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { Maximize, Minimize } from "lucide-react";
 import { generateSessionPin } from "@/app/actions/teacher";
+import { usePusherEvent } from "@/hooks/usePusher"; // Integrated clean real-time hook
 
 interface Schedule {
   id: number | string;
@@ -19,6 +21,7 @@ interface SessionTabProps {
 }
 
 export default function SessionTab({ schedules, teacherId }: SessionTabProps) {
+  const router = useRouter();
   const [selectedScheduleId, setSelectedScheduleId] = useState<number | string>("");
   const [activePin, setActivePin] = useState<string | null>(null);
   const [timeLeft, setTimeLeft] = useState<number>(0);
@@ -29,6 +32,12 @@ export default function SessionTab({ schedules, teacherId }: SessionTabProps) {
   
   const [isFullscreen, setIsFullscreen] = useState(false);
   const fullscreenRef = useRef<HTMLDivElement>(null);
+
+  // --- Pusher Real-Time Background Synchronization ---
+  // Silently refresh the class roster choices if an administrator alters schedule tables[cite: 1]
+  usePusherEvent("schedules-channel", "schedule-created", () => router.refresh());
+  usePusherEvent("schedules-channel", "schedule-updated", () => router.refresh());
+  usePusherEvent("schedules-channel", "schedule-deleted", () => router.refresh());
 
   useEffect(() => {
     const currentDay = new Intl.DateTimeFormat("en-US", {
@@ -202,7 +211,6 @@ export default function SessionTab({ schedules, teacherId }: SessionTabProps) {
               ))}
             </div>
 
-            {/* Added custom-scrollbar class here */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[400px] overflow-y-auto pr-2 pb-2 custom-scrollbar">
               {filteredSchedules.length > 0 ? (
                 filteredSchedules.map((sched) => (
@@ -320,7 +328,7 @@ export default function SessionTab({ schedules, teacherId }: SessionTabProps) {
                 <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest">
                   Active Class Session
                 </h2>
-                <div className={`${isFullscreen ? 'text-4xl sm:text-5xl' : 'text-3xl'} font-black text-[#011B51] transition-all`}>
+                <div className="max-w-full px-4 break-words font-black text-[#011B51] transition-all text-2xl sm:text-4xl md:text-5xl">
                   {activeSchedule.course_code}{" "}
                   <span className="text-slate-300 mx-2">|</span> Sec{" "}
                   {activeSchedule.section}
@@ -362,7 +370,7 @@ export default function SessionTab({ schedules, teacherId }: SessionTabProps) {
                         strokeLinejoin="round"
                         strokeWidth="2"
                         d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                      ></path>
+                  ></path>
                     </svg>
                     {activeSchedule.lab_room}
                   </span>
@@ -370,7 +378,7 @@ export default function SessionTab({ schedules, teacherId }: SessionTabProps) {
               </div>
             )}
 
-            <div className={`${isFullscreen ? 'text-[160px] sm:text-[220px]' : 'text-[120px] sm:text-[160px]'} leading-none font-mono font-black text-[#011B51] tracking-[0.15em] mb-12 drop-shadow-sm transition-all`}>
+            <div className={`${isFullscreen ? 'text-[120px] sm:text-[180px] md:text-[220px]' : 'text-[90px] sm:text-[130px] md:text-[160px]'} leading-none font-mono font-black text-[#011B51] tracking-[0.15em] mb-12 drop-shadow-sm transition-all select-all`}>
               {activePin}
             </div>
 

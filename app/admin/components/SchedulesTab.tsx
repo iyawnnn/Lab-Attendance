@@ -10,6 +10,7 @@ import {
   assignTeacherToSchedule,
 } from "@/app/actions/schedule";
 import { Schedule } from "../types";
+import { usePusherEvent } from "@/hooks/usePusher"; // Integrated custom real-time hook[cite: 1]
 
 // --- CUSTOM UI COMPONENT: Filter Dropdown ---
 function FilterDropdown({ 
@@ -122,7 +123,6 @@ function FilterDropdown({
     </div>
   );
 }
-// --------------------------------------------------------
 
 interface SchedulesTabProps {
   schedules: Schedule[];
@@ -185,6 +185,12 @@ export default function SchedulesTab({ schedules = [], teachers = [], refreshDat
   const [assignScheduleId, setAssignScheduleId] = useState<number | null>(null);
   const [assignTeacherId, setAssignTeacherId] = useState<string>("");
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // --- Pusher Real-Time Background Synchronization ---
+  // Re-fetch server components data when any write mutator emits an event[cite: 1]
+  usePusherEvent("schedules-channel", "schedule-created", () => refreshData());
+  usePusherEvent("schedules-channel", "schedule-updated", () => refreshData());
+  usePusherEvent("schedules-channel", "schedule-deleted", () => refreshData());
 
   const uniqueDays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
   const uniqueRooms = Array.from(new Set(schedules.map(s => s.lab_room))).sort();

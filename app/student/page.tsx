@@ -9,6 +9,7 @@ import {
   getServerTime,
 } from "@/app/actions/student";
 import GeofenceGuard from "./components/GeofenceGuard";
+import { usePusherEvent } from "@/hooks/usePusher"; // Integrated clean real-time hook
 
 interface AttendanceRecord {
   id: number;
@@ -96,6 +97,26 @@ function StudentPortalContent() {
       setLabRooms(response.data);
     }
   }, []);
+
+  // --- Pusher Real-Time Background Synchronization ---
+  // Instantly re-fetch available lab rooms when an admin/teacher makes scheduling changes
+  usePusherEvent("schedules-channel", "schedule-created", () => {
+    if (view === "attendance") fetchRooms();
+  });
+  usePusherEvent("schedules-channel", "schedule-updated", () => {
+    if (view === "attendance") fetchRooms();
+  });
+  usePusherEvent("schedules-channel", "schedule-deleted", () => {
+    if (view === "attendance") {
+      fetchRooms();
+      setSelectedRoom(""); // Clear selection to prevent out-of-sync submits
+    }
+  });
+
+  // Watch individual student security channel for account recovery context shifts
+  usePusherEvent(`student-${registeredId}-channel`, "recovery-pin-updated", () => {
+    if (registeredId) fetchHistory(registeredId);
+  });
 
   useEffect(() => {
     async function initializeSession() {
@@ -187,7 +208,8 @@ function StudentPortalContent() {
       }
     }
 
-    const interval = setInterval(verifyActiveSession, 4000);
+    // Polling relaxed to 20s since WebSocket triggers are instant and protect database connections
+    const interval = setInterval(verifyActiveSession, 20000);
     return () => clearInterval(interval);
   }, [view, registeredId]);
 
@@ -1055,6 +1077,7 @@ function StudentPortalContent() {
                           <path
                             strokeLinecap="round"
                             strokeLinejoin="round"
+                            strokeWidth={2}
                             d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
                           />
                         </svg>

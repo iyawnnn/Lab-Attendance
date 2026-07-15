@@ -1,6 +1,9 @@
+// app/api/student/update-pin/route.ts
+
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { createHash } from "crypto";
+import { pusherServer } from "@/lib/pusherServer"; // Integrated Pusher server instance[cite: 1]
 
 export async function POST(request: Request) {
   console.log("[RECOVER_STEP_2] Committing fresh PIN credentials.");
@@ -32,6 +35,16 @@ export async function POST(request: Request) {
     });
 
     console.log(`[PIN_UPDATE] Recovery PIN successfully updated for Student ID: ${cleanStudentId}`);
+
+    // Safely trigger real-time updates for recovery channel listeners[cite: 1]
+    try {
+      await pusherServer.trigger(`student-${cleanStudentId}-channel`, "recovery-pin-updated", {
+        studentId: cleanStudentId,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (pusherError) {
+      console.error("[REALTIME_BROADCAST_ERROR] Failed to push PIN update event:", pusherError);
+    }
 
     return NextResponse.json({ success: true, message: "Recovery PIN successfully updated." }, { status: 200 });
 
