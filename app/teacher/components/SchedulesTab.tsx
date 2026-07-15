@@ -1,21 +1,23 @@
 "use client";
 
 import { useState, useMemo, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { Search, ChevronDown, Check, X } from "lucide-react";
+import { usePusherEvent } from "@/hooks/usePusher";
 
 // --- CUSTOM UI COMPONENT: Filter Dropdown ---
-function FilterDropdown({ 
-  options, 
-  value, 
-  onChange, 
-  placeholder, 
+function FilterDropdown({
+  options,
+  value,
+  onChange,
+  placeholder,
   allowClear = false,
   clearText = "Clear selection",
   showSearch = true
-}: { 
-  options: { id: string; label: string }[]; 
-  value: string; 
-  onChange: (val: string) => void; 
+}: {
+  options: { id: string; label: string }[];
+  value: string;
+  onChange: (val: string) => void;
   placeholder: string;
   allowClear?: boolean;
   clearText?: string;
@@ -37,7 +39,7 @@ function FilterDropdown({
 
   const filteredOptions = useMemo(() => {
     if (!showSearch) return options;
-    return options.filter(opt => 
+    return options.filter(opt =>
       opt.label.toLowerCase().includes(query.toLowerCase())
     );
   }, [options, query, showSearch]);
@@ -73,19 +75,19 @@ function FilterDropdown({
           )}
           <div className="overflow-y-auto max-h-[200px] flex-1 p-1.5 custom-scrollbar">
             {allowClear && value && (
-               <div
-                 onClick={() => {
-                   onChange("");
-                   setIsOpen(false);
-                   setQuery("");
-                 }}
-                 className="px-3 py-2.5 mb-1 text-sm rounded-md cursor-pointer flex items-center gap-2 text-slate-500 hover:bg-slate-100 transition-colors"
-               >
-                 <X size={14} />
-                 <span className="italic">{clearText}</span>
-               </div>
+              <div
+                onClick={() => {
+                  onChange("");
+                  setIsOpen(false);
+                  setQuery("");
+                }}
+                className="px-3 py-2.5 mb-1 text-sm rounded-md cursor-pointer flex items-center gap-2 text-slate-500 hover:bg-slate-100 transition-colors"
+              >
+                <X size={14} />
+                <span className="italic">{clearText}</span>
+              </div>
             )}
-            
+
             {filteredOptions.length === 0 ? (
               <div className="p-4 text-xs font-bold uppercase tracking-widest text-slate-400 text-center">No matches found</div>
             ) : (
@@ -97,11 +99,10 @@ function FilterDropdown({
                     setIsOpen(false);
                     setQuery("");
                   }}
-                  className={`px-3 py-2.5 text-sm rounded-md cursor-pointer flex items-center justify-between transition-colors ${
-                    value === opt.id 
-                      ? 'bg-[#011B51]/5 text-[#011B51] font-bold' 
+                  className={`px-3 py-2.5 text-sm rounded-md cursor-pointer flex items-center justify-between transition-colors ${value === opt.id
+                      ? 'bg-[#011B51]/5 text-[#011B51] font-bold'
                       : 'hover:bg-slate-50 text-slate-700 font-medium'
-                  }`}
+                    }`}
                 >
                   <span className="truncate pr-4">{opt.label}</span>
                   {value === opt.id && <Check size={14} className="text-[#011B51] shrink-0" />}
@@ -132,16 +133,17 @@ interface SchedulesTabProps {
 const ITEMS_PER_PAGE = 9;
 
 export default function SchedulesTab({ schedules = [] }: SchedulesTabProps) {
+  const router = useRouter();
   const [dayFilter, setDayFilter] = useState<string>("");
   const [roomFilter, setRoomFilter] = useState<string>("");
   const [sectionFilter, setSectionFilter] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [currentPage, setCurrentPage] = useState<number>(1);
-  
+
   const uniqueDays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-  
+
   const dayOptions = uniqueDays.map(day => ({ id: day, label: day }));
-  
+
   const roomOptions = useMemo(() => {
     const unique = Array.from(new Set(schedules.map(s => s.lab_room))).filter(Boolean).sort();
     return unique.map(r => ({ id: r, label: r }));
@@ -152,14 +154,19 @@ export default function SchedulesTab({ schedules = [] }: SchedulesTabProps) {
     return unique.map(s => ({ id: s, label: `Section ${s}` }));
   }, [schedules]);
 
+  // --- Real-Time Sync Event Configuration ---
+  usePusherEvent("schedules-channel", "schedule-created", () => router.refresh());
+  usePusherEvent("schedules-channel", "schedule-updated", () => router.refresh());
+  usePusherEvent("schedules-channel", "schedule-deleted", () => router.refresh());
+
   const filteredSchedules = useMemo(() => {
     return schedules.filter(sched => {
       const matchDay = dayFilter === "" || sched.date === dayFilter;
       const matchRoom = roomFilter === "" || sched.lab_room === roomFilter;
       const matchSection = sectionFilter === "" || sched.section === sectionFilter;
-      
+
       const searchLower = searchQuery.toLowerCase();
-      const matchSearch = searchQuery === "" || 
+      const matchSearch = searchQuery === "" ||
         sched.course_code.toLowerCase().includes(searchLower) ||
         sched.section.toLowerCase().includes(searchLower) ||
         sched.lab_room.toLowerCase().includes(searchLower);
@@ -179,11 +186,11 @@ export default function SchedulesTab({ schedules = [] }: SchedulesTabProps) {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      
+
       {/* Advanced Filter Control Bar */}
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col xl:flex-row gap-4 items-center justify-between relative z-10">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 w-full flex-1">
-          <input 
+          <input
             type="text"
             placeholder="Search course, section, or room..."
             className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:border-[#011B51] transition-colors shadow-sm"
@@ -216,7 +223,7 @@ export default function SchedulesTab({ schedules = [] }: SchedulesTabProps) {
             clearText="Show All Sections"
           />
         </div>
-        
+
         <div className="flex w-full xl:w-auto shrink-0 mt-4 xl:mt-0 justify-end">
           <div className="text-xs font-bold text-slate-500 uppercase tracking-widest bg-slate-100 border border-slate-200 px-4 py-2.5 rounded-lg whitespace-nowrap shadow-sm">
             {filteredSchedules.length} {filteredSchedules.length === 1 ? 'Class Found' : 'Classes Found'}
@@ -259,11 +266,11 @@ export default function SchedulesTab({ schedules = [] }: SchedulesTabProps) {
           >
             Previous
           </button>
-          
+
           <span className="text-xs font-black text-[#011B51] uppercase tracking-widest">
             Page {currentPage} of {totalPages}
           </span>
-          
+
           <button
             onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
             disabled={currentPage === totalPages}

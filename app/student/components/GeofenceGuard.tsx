@@ -13,7 +13,7 @@ export default function GeofenceGuard({ children }: GeofenceGuardProps) {
   const [errorMessage, setErrorMessage] = useState("");
   const watchIdRef = useRef<number | null>(null);
 
-  // Core logic to check distance
+  // Core logic to check distance against university coordinates
   const evaluatePosition = (position: GeolocationPosition) => {
     const targetLat = parseFloat(process.env.NEXT_PUBLIC_CAMPUS_LAT || "0");
     const targetLng = parseFloat(process.env.NEXT_PUBLIC_CAMPUS_LNG || "0");
@@ -31,7 +31,7 @@ export default function GeofenceGuard({ children }: GeofenceGuardProps) {
     }
   };
 
-  // Error handler
+  // Error handler for browser geolocation exceptions
   const handleError = (error: GeolocationPositionError) => {
     setStatus("error");
     switch (error.code) {
@@ -50,7 +50,7 @@ export default function GeofenceGuard({ children }: GeofenceGuardProps) {
     }
   };
 
-  // Start the continuous watcher
+  // Start the continuous geolocation hardware watcher
   const startWatching = () => {
     if (!navigator.geolocation) {
       setStatus("error");
@@ -93,7 +93,7 @@ export default function GeofenceGuard({ children }: GeofenceGuardProps) {
     );
   };
 
-  // Initialize on mount
+  // Initialize watchers on component mount and clean up on unmount
   useEffect(() => {
     startWatching();
     return () => {
@@ -103,7 +103,7 @@ export default function GeofenceGuard({ children }: GeofenceGuardProps) {
     };
   }, []);
 
-  // If inside the campus, render the actual student page
+  // If inside the campus geofence, render the actual student view
   if (status === "allowed") {
     return <>{children}</>;
   }
@@ -116,11 +116,11 @@ export default function GeofenceGuard({ children }: GeofenceGuardProps) {
         <div className="flex flex-col items-center justify-center p-10 bg-white rounded-[2rem] shadow-xl border border-slate-100 text-center animate-in fade-in zoom-in-95 duration-500 max-w-sm w-full">
           <div className="relative w-24 h-24 mb-8 flex items-center justify-center">
             <div className="absolute inset-0 rounded-full border-4 border-slate-100"></div>
-            <div className="absolute inset-0 rounded-full border-4 border-[#011B51] border-t-transparent animate-spin"></div>
-            <div className="absolute inset-4 rounded-full bg-[#011B51]/5 animate-pulse"></div>
-            <Navigation className="w-8 h-8 text-[#011B51] animate-pulse relative z-10" />
+            <div className="absolute inset-0 rounded-full border-4 border-slate-900 border-t-transparent animate-spin"></div>
+            <div className="absolute inset-4 rounded-full bg-slate-900/5 animate-pulse"></div>
+            <Navigation className="w-8 h-8 text-slate-900 animate-pulse relative z-10" />
           </div>
-          <h3 className="text-xl font-black text-[#011B51] uppercase tracking-tight mb-3">
+          <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight mb-3">
             Locating Device
           </h3>
           <p className="text-sm font-semibold text-slate-500 leading-relaxed">
@@ -129,7 +129,7 @@ export default function GeofenceGuard({ children }: GeofenceGuardProps) {
         </div>
       )}
 
-      {/* 2. OUTSIDE CAMPUS STATE */}
+      {/* 2. OUTSIDE CAMPUS PERIMETER STATE */}
       {status === "denied" && (
         <div className="flex flex-col items-center justify-center p-8 bg-white rounded-[2rem] shadow-xl border border-slate-100 text-center animate-in zoom-in-95 duration-500 max-w-md w-full relative overflow-hidden">
           
@@ -154,7 +154,7 @@ export default function GeofenceGuard({ children }: GeofenceGuardProps) {
           
           <button 
             onClick={handleRetry}
-            className="w-full bg-[#011B51] hover:bg-[#022a7a] border-b-4 border-[#A51A21] text-white font-bold py-4 px-6 rounded-xl text-xs uppercase tracking-widest transition-all shadow-md active:scale-[0.98] flex items-center justify-center gap-3 relative z-10 cursor-pointer"
+            className="w-full bg-slate-900 hover:bg-slate-800 border-b-4 border-rose-600 text-white font-bold py-4 px-6 rounded-xl text-xs uppercase tracking-widest transition-all shadow-md active:scale-[0.98] flex items-center justify-center gap-3 relative z-10 cursor-pointer"
           >
             <RefreshCw className="w-4 h-4" />
             Retry Location Check

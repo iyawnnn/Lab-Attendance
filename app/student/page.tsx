@@ -3,12 +3,14 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { get, set, del } from "idb-keyval";
 import { GoogleOAuthProvider, GoogleLogin } from "@react-oauth/google";
+import { ArrowLeft, LogOut, Loader2, Clock } from "lucide-react";
 import {
   getLabRooms,
   submitAttendance,
   getServerTime,
 } from "@/app/actions/student";
 import GeofenceGuard from "./components/GeofenceGuard";
+import { usePusherEvent } from "@/hooks/usePusher";
 
 interface AttendanceRecord {
   id: number;
@@ -25,10 +27,10 @@ interface AttendanceRecord {
   };
 }
 
-const ITEMS_PER_PAGE = 5;
+const ITEMS_PER_PAGE = 3;
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
-const ALLOWED_DOMAINS = process.env.NEXT_PUBLIC_ALLOWED_DOMAINS || "ua.edu.ph";
-const STUDENT_ID_PLACEHOLDER = process.env.NEXT_PUBLIC_STUDENT_ID_PLACEHOLDER || "2023001839";
+const STUDENT_ID_PLACEHOLDER =
+  process.env.NEXT_PUBLIC_STUDENT_ID_PLACEHOLDER || "2023001671";
 
 function StudentPortalContent() {
   const [view, setView] = useState<
@@ -68,10 +70,6 @@ function StudentPortalContent() {
   const [philippineTime, setPhilippineTime] = useState("");
   const [registeredId, setRegisteredId] = useState<string | null>(null);
 
-  const formattedDomains = useMemo(() => {
-    return ALLOWED_DOMAINS.split(',').map(d => `@${d.trim()}`).join(' or ');
-  }, []);
-
   const fetchHistory = useCallback(async (idToFetch: string) => {
     if (!idToFetch) return;
     setIsLoadingHistory(true);
@@ -96,6 +94,23 @@ function StudentPortalContent() {
       setLabRooms(response.data);
     }
   }, []);
+
+  usePusherEvent("schedules-channel", "schedule-created", () => {
+    if (view === "attendance") fetchRooms();
+  });
+  usePusherEvent("schedules-channel", "schedule-updated", () => {
+    if (view === "attendance") fetchRooms();
+  });
+  usePusherEvent("schedules-channel", "schedule-deleted", () => {
+    if (view === "attendance") {
+      fetchRooms();
+      setSelectedRoom("");
+    }
+  });
+
+  usePusherEvent(`student-${registeredId}-channel`, "recovery-pin-updated", () => {
+    if (registeredId) fetchHistory(registeredId);
+  });
 
   useEffect(() => {
     async function initializeSession() {
@@ -187,7 +202,7 @@ function StudentPortalContent() {
       }
     }
 
-    const interval = setInterval(verifyActiveSession, 4000);
+    const interval = setInterval(verifyActiveSession, 20000);
     return () => clearInterval(interval);
   }, [view, registeredId]);
 
@@ -260,7 +275,7 @@ function StudentPortalContent() {
 
           setView("recovery_verify");
           setIsError(true);
-          setMessage("Device Re-authorization Required: This account is active on another terminal. Provide your PIN to complete the device transfer.");
+          setMessage("Device re-authorization required. Provide your PIN to transfer this account.");
           setIsSubmitting(false);
           return;
         }
@@ -407,7 +422,7 @@ function StudentPortalContent() {
         setFirstName(data.firstName || firstName);
         setLastName(data.lastName || lastName);
 
-        setMessage("Verification Successful! Previous hardware terminal sessions dropped.");
+        setMessage("Verification Successful! Previous hardware bindings dropped.");
         setIsError(false);
         setTimeout(() => {
           setMessage("");
@@ -487,9 +502,7 @@ function StudentPortalContent() {
 
     if (!roomPin || roomPin.length !== 4) {
       setIsError(true);
-      setMessage(
-        "Please enter the 4-digit Room PIN displayed by your instructor."
-      );
+      setMessage("Please enter the 4-digit Room PIN displayed by your instructor.");
       return;
     }
 
@@ -558,11 +571,9 @@ function StudentPortalContent() {
           await del("student_id");
           await del("student_public_key");
           await del("session_token");
-          setTimeout(() => {
-            setView("login");
-            setIsError(false);
-            setMessage("Security key mismatch. Please authenticate again.");
-          }, 2000);
+          setView("login");
+          setIsError(false);
+          setMessage("Security key mismatch. Please authenticate again.");
         }
       }
     } catch (error) {
@@ -617,10 +628,10 @@ function StudentPortalContent() {
 
   if (view === "loading") {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center font-bold text-[#011B51] font-sans">
-        <div className="flex flex-col items-center animate-pulse">
-          <div className="w-12 h-12 border-4 border-[#011B51] border-t-[#FED702] rounded-full animate-spin mb-4" />
-          Authenticating Security Keys...
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center font-bold text-slate-800 font-sans">
+        <div className="flex flex-col items-center gap-3 text-sm font-semibold tracking-wide text-slate-500">
+          <Loader2 className="w-6 h-6 text-slate-900 animate-spin" />
+          Verifying security hardware credentials...
         </div>
       </div>
     );
@@ -628,6 +639,8 @@ function StudentPortalContent() {
 
   return (
     <main className="min-h-screen w-full flex flex-col lg:flex-row bg-white font-sans">
+
+      {/* LEFT SIDE PANEL */}
       <div className="relative w-full lg:w-[40%] min-h-[25vh] sm:min-h-[30vh] lg:min-h-screen bg-[#011B51] flex flex-col justify-center lg:justify-between p-6 sm:p-10 lg:p-14 overflow-hidden shadow-md lg:shadow-2xl z-10 border-b-4 lg:border-b-0 lg:border-r-4 border-[#1e3585] shrink-0">
         <div className="absolute inset-0 z-0 bg-[#011B51]">
           <img
@@ -665,194 +678,174 @@ function StudentPortalContent() {
         </div>
       </div>
 
+      {/* RIGHT SIDE PANEL */}
       <div className="w-full lg:w-[60%] flex-1 flex items-center justify-center p-6 sm:p-10 lg:p-16 bg-white relative">
         <a
           href="/"
-          className="absolute top-4 right-6 lg:top-8 lg:right-10 text-xs font-bold text-slate-400 hover:text-[#011B51] transition-colors uppercase tracking-wider"
+          className="absolute top-4 right-6 lg:top-8 lg:right-10 text-xs font-bold text-slate-400 hover:text-[#011B51] transition-colors uppercase tracking-wider flex items-center gap-1.5"
         >
-          &larr; Main Portal
+          <ArrowLeft size={13} />
+          Main Portal
         </a>
 
-        <div className="w-full max-w-lg mt-6 lg:mt-0">
+        {/* Form Container */}
+        <div className="w-full max-w-md mt-6 lg:mt-0">
+
+          {/* AUTHENTICATION VIEW */}
           {view === "login" && (
-            <div className="animate-in fade-in duration-500">
-              <div className="mb-8 lg:mb-10 text-center lg:text-left">
+            <div className="animate-in fade-in slide-in-from-bottom-2 duration-500 space-y-10">
+              <div className="text-center lg:text-left space-y-2">
                 <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-[#011B51] uppercase tracking-tight">
                   Institutional Login
                 </h2>
-                <div className="w-12 lg:w-16 h-1 lg:h-1.5 bg-[#FED702] mt-3 lg:mt-4 mb-2 lg:mb-3 rounded-full mx-auto lg:mx-0" />
-                <p className="text-slate-500 text-xs sm:text-sm font-semibold uppercase tracking-wide">
+                <div className="w-12 lg:w-16 h-1 lg:h-1.5 bg-[#FED702] rounded-full mx-auto lg:mx-0" />
+                <p className="text-slate-400 text-xs sm:text-sm font-semibold uppercase tracking-wide pt-1">
                   Sign in with your official institutional email.
                 </p>
               </div>
 
-              <div className="flex flex-col items-center justify-center p-8 bg-slate-50 border border-slate-200 rounded-2xl shadow-sm space-y-6">
-                <GoogleLogin
-                  onSuccess={handleGoogleSuccess}
-                  onError={() => {
-                    setIsError(true);
-                    setMessage("Google Sign-In popup closed or failed.");
-                  }}
-                  theme="filled_blue"
-                  shape="rectangular"
-                  size="large"
-                />
-
-                <p className="text-xs text-center text-slate-500 font-medium">
-                  Access is strictly restricted to valid {formattedDomains} institutional addresses.
+              <div className="space-y-4 text-center">
+                <div className="flex justify-center py-2">
+                  <GoogleLogin
+                    onSuccess={handleGoogleSuccess}
+                    onError={() => {
+                      setIsError(true);
+                      setMessage("Google Sign-In popup context dropped.");
+                    }}
+                    theme="outline"
+                    shape="rectangular"
+                    size="large"
+                  />
+                </div>
+                <p className="text-[11px] text-slate-400 font-medium leading-relaxed">
+                  Access parameters restrict identity checking exclusively to <span className="font-bold text-[#011B51]">@ua.edu.ph</span> emails.
                 </p>
               </div>
 
-              <div className="mt-6 text-center">
+              <div className="text-center pt-2">
                 <button
                   type="button"
                   onClick={() => {
-                    setGoogleEmail("");
-                    setStudentId("");
-                    setFirstName("");
-                    setLastName("");
-                    setView("recovery_verify");
-                    setIsError(false);
-                    setMessage("");
+                    setGoogleEmail(""); setStudentId(""); setFirstName(""); setLastName("");
+                    setView("recovery_verify"); setIsError(false); setMessage("");
                   }}
-                  className="text-xs font-bold text-slate-400 hover:text-[#011B51] uppercase tracking-wider transition-all cursor-pointer underline underline-offset-4"
+                  className="text-xs font-bold text-slate-400 hover:text-[#011B51] uppercase tracking-widest transition-colors cursor-pointer underline underline-offset-4"
                 >
-                  Recover/Transfer Account to this Device
+                  Recover / Transfer Account to this Device
                 </button>
+              </div>
+
+              <div className="border-t border-slate-100 pt-8 space-y-3">
+                <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">
+                  Portal Guidelines
+                </p>
+                <ul className="space-y-2.5 text-xs text-slate-400 font-medium leading-relaxed">
+                  <li className="flex items-start gap-2.5">
+                    <span className="text-[#011B51] font-black">01.</span>
+                    <span>Authenticate utilizing your personal structural laboratory SSO account credentials.</span>
+                  </li>
+                  <li className="flex items-start gap-2.5">
+                    <span className="text-[#011B51] font-black">02.</span>
+                    <span>The identity ledger automatically configures secure terminal key pairs on initial match.</span>
+                  </li>
+                  <li className="flex items-start gap-2.5">
+                    <span className="text-[#011B51] font-black">03.</span>
+                    <span>Verify your proximity parameter maps to clear the physical geofence boundary gates.</span>
+                  </li>
+                </ul>
               </div>
             </div>
           )}
 
+          {/* ONBOARDING VIEW */}
           {view === "onboarding" && (
-            <div className="animate-in fade-in duration-500">
-              <div className="mb-8 lg:mb-10 text-center lg:text-left">
+            <div className="animate-in fade-in duration-500 space-y-6">
+              <div className="text-center lg:text-left space-y-2">
                 <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-[#011B51] uppercase tracking-tight">
                   One-Time Profile Setup
                 </h2>
-                <div className="w-12 lg:w-16 h-1 lg:h-1.5 bg-[#FED702] mt-3 lg:mt-4 mb-2 lg:mb-3 rounded-full mx-auto lg:mx-0" />
-                <p className="text-slate-500 text-xs sm:text-sm font-semibold uppercase tracking-wide">
+                <div className="w-12 lg:w-16 h-1 lg:h-1.5 bg-[#FED702] rounded-full mx-auto lg:mx-0" />
+                <p className="text-slate-400 text-xs sm:text-sm font-semibold uppercase tracking-wide">
                   Bind your Student ID and hardware key to complete onboarding.
                 </p>
               </div>
 
-              <form
-                onSubmit={handleCompleteOnboarding}
-                className="space-y-4 lg:space-y-6"
-              >
-                <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
-                  <p className="text-[10px] font-bold text-blue-700 uppercase tracking-widest mb-1">
-                    Authenticated Email
-                  </p>
-                  <p className="text-sm font-bold text-[#011B51]">{googleEmail}</p>
+              <form onSubmit={handleCompleteOnboarding} className="space-y-4">
+                <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-xl text-xs">
+                  <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Authenticated Email</span>
+                  <span className="font-bold text-slate-700">{googleEmail}</span>
                 </div>
 
                 <div>
-                  <label className="block text-[10px] sm:text-xs font-bold text-[#011B51] uppercase tracking-wide mb-1.5 lg:mb-2 ml-1">
-                    Student ID
-                  </label>
+                  <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-0.5">Student ID</label>
                   <input
                     type="text"
                     placeholder={`e.g. ${STUDENT_ID_PLACEHOLDER}`}
-                    className="w-full px-4 lg:px-5 py-3.5 lg:py-4 rounded-xl bg-slate-50 border border-slate-200 outline-none text-sm sm:text-base font-medium focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all shadow-sm"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/10 transition-all shadow-sm"
                     value={studentId}
                     onChange={(e) => setStudentId(e.target.value)}
                     required
                   />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-6">
+                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-[10px] sm:text-xs font-bold text-[#011B51] uppercase tracking-wide mb-1.5 lg:mb-2 ml-1">
-                      First Name
-                    </label>
-                    <input
-                      type="text"
-                      className="w-full px-4 lg:px-5 py-3.5 lg:py-4 rounded-xl bg-slate-100 border border-slate-200 text-slate-500 cursor-not-allowed outline-none text-sm sm:text-base font-medium"
-                      value={firstName}
-                      disabled
-                    />
+                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-0.5">First Name</label>
+                    <input type="text" className="w-full px-4 py-3 bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed text-sm font-medium rounded-xl outline-none" value={firstName} disabled />
                   </div>
-
                   <div>
-                    <label className="block text-[10px] sm:text-xs font-bold text-[#011B51] uppercase tracking-wide mb-1.5 lg:mb-2 ml-1">
-                      Last Name
-                    </label>
-                    <input
-                      type="text"
-                      className="w-full px-4 lg:px-5 py-3.5 lg:py-4 rounded-xl bg-slate-100 border border-slate-200 text-slate-500 cursor-not-allowed outline-none text-sm sm:text-base font-medium"
-                      value={lastName}
-                      disabled
-                    />
+                    <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-0.5">Last Name</label>
+                    <input type="text" className="w-full px-4 py-3 bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed text-sm font-medium rounded-xl outline-none" value={lastName} disabled />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-[10px] sm:text-xs font-bold text-[#011B51] uppercase tracking-wide mb-1.5 lg:mb-2 ml-1">
-                    Recovery PIN (6 Digits)
-                  </label>
+                  <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-0.5">Recovery PIN (6 Digits)</label>
                   <input
                     type="password"
                     placeholder="Create 6-Digit PIN"
                     maxLength={6}
                     pattern="\d{6}"
-                    title="Must be exactly 6 digits"
-                    className="w-full px-4 lg:px-5 py-3.5 lg:py-4 rounded-xl bg-slate-50 border border-slate-200 outline-none text-sm sm:text-base font-medium focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all shadow-sm"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all shadow-sm"
                     value={recoveryPin}
                     onChange={(e) => setRecoveryPin(e.target.value)}
                     required
                   />
                 </div>
 
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full bg-[#011B51] hover:bg-[#022a7a] text-white font-bold py-3.5 lg:py-4 rounded-xl mt-6 lg:mt-8 transition-all shadow-md hover:shadow-lg lg:hover:-translate-y-0.5 border-b-4 border-[#A51A21] disabled:opacity-70 disabled:border-[#011B51] disabled:transform-none text-xs sm:text-sm uppercase tracking-wider cursor-pointer"
-                >
-                  {isSubmitting
-                    ? "Registering Profile..."
-                    : "Complete Setup & Register"}
+                <button type="submit" disabled={isSubmitting} className="w-full bg-[#011B51] hover:bg-[#022a7a] text-white font-bold py-3.5 rounded-xl transition-all shadow-md border-b-4 border-[#A51A21] disabled:opacity-70 text-xs uppercase tracking-wider cursor-pointer">
+                  {isSubmitting ? "Registering Profile..." : "Complete Setup & Register"}
                 </button>
               </form>
 
-              <div className="mt-8 lg:mt-12 text-center border-t border-slate-100 pt-6 lg:pt-8">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setView("login");
-                    setMessage("");
-                  }}
-                  className="text-xs sm:text-sm font-bold text-slate-400 hover:text-[#011B51] uppercase tracking-wide transition-colors cursor-pointer"
-                >
+              <div className="text-center lg:text-left pt-2">
+                <button type="button" onClick={() => { setView("login"); setMessage(""); }} className="text-xs font-bold text-slate-400 hover:text-[#011B51] uppercase tracking-wide transition-colors cursor-pointer">
                   &larr; Cancel and Switch Account
                 </button>
               </div>
             </div>
           )}
 
+          {/* RECOVERY STEP 1 VIEW */}
           {view === "recovery_verify" && (
-            <div className="animate-in fade-in duration-500">
-              <div className="mb-8 lg:mb-10 text-center lg:text-left">
+            <div className="animate-in fade-in duration-500 space-y-6">
+              <div className="text-center lg:text-left space-y-2">
                 <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-[#011B51] uppercase tracking-tight">
                   Device Authorization Transfer
                 </h2>
-                <div className="w-12 lg:w-16 h-1 lg:h-1.5 bg-[#FED702] mt-3 lg:mt-4 mb-2 lg:mb-3 rounded-full mx-auto lg:mx-0" />
-                <p className="text-slate-500 text-xs sm:text-sm font-semibold uppercase tracking-wide">
+                <div className="w-12 lg:w-16 h-1 lg:h-1.5 bg-[#FED702] rounded-full mx-auto lg:mx-0" />
+                <p className="text-slate-400 text-xs sm:text-sm font-semibold uppercase tracking-wide">
                   Authenticate and clear previous active sessions to sync mappings.
                 </p>
               </div>
 
-              <form
-                onSubmit={handleRecoveryStep1Verify}
-                className="space-y-4 lg:space-y-6"
-              >
+              <form onSubmit={handleRecoveryStep1Verify} className="space-y-4">
                 <div>
-                  <label className="block text-[10px] sm:text-xs font-bold text-[#011B51] uppercase tracking-wide mb-1.5 lg:mb-2 ml-1">
-                    Student ID
-                  </label>
+                  <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-0.5">Student ID</label>
                   <input
                     type="text"
                     placeholder={`e.g. ${STUDENT_ID_PLACEHOLDER}`}
-                    className="w-full px-4 lg:px-5 py-3.5 lg:py-4 rounded-xl bg-slate-50 border border-slate-200 outline-none text-sm sm:text-base font-medium focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all shadow-sm"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all shadow-sm"
                     value={studentId}
                     onChange={(e) => setStudentId(e.target.value)}
                     required
@@ -860,221 +853,158 @@ function StudentPortalContent() {
                 </div>
 
                 <div>
-                  <label className="block text-[10px] sm:text-xs font-bold text-[#011B51] uppercase tracking-wide mb-1.5 lg:mb-2 ml-1">
-                    Current 6-Digit Recovery PIN
-                  </label>
+                  <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-0.5">Current Recovery PIN</label>
                   <input
                     type="password"
                     placeholder="Enter Current PIN"
                     maxLength={6}
                     pattern="\d{6}"
-                    title="Must be exactly 6 digits"
-                    className="w-full px-4 lg:px-5 py-3.5 lg:py-4 rounded-xl bg-slate-50 border border-slate-200 outline-none text-center text-lg sm:text-xl font-mono font-bold tracking-[0.3em] focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all shadow-sm"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 outline-none text-center text-lg sm:text-xl font-mono font-bold tracking-[0.25em] focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all shadow-sm rounded-xl"
                     value={recoveryPin}
                     onChange={(e) => setRecoveryPin(e.target.value.replace(/\D/g, ""))}
                     required
                   />
                 </div>
 
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full bg-[#011B51] hover:bg-[#022a7a] text-white font-bold py-3.5 lg:py-4 rounded-xl mt-6 lg:mt-8 transition-all shadow-md hover:shadow-lg lg:hover:-translate-y-0.5 border-b-4 border-[#A51A21] disabled:opacity-70 disabled:border-[#011B51] disabled:transform-none text-xs sm:text-sm uppercase tracking-wider cursor-pointer"
-                >
-                  {isSubmitting
-                    ? "Verifying..."
-                    : "Verify & Evict Other Terminal"}
+                <button type="submit" disabled={isSubmitting} className="w-full bg-[#011B51] hover:bg-[#022a7a] text-white font-bold py-3.5 rounded-xl transition-all shadow-md border-b-4 border-[#A51A21] disabled:opacity-70 text-xs uppercase tracking-wider cursor-pointer">
+                  {isSubmitting ? "Verifying..." : "Verify & Evict Other Terminal"}
                 </button>
               </form>
 
-              <div className="mt-8 lg:mt-12 text-center border-t border-slate-100 pt-6 lg:pt-8">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setView("login");
-                    setMessage("");
-                    setIsError(false);
-                    setStudentId("");
-                    setRecoveryPin("");
-                    setNewRecoveryPin("");
-                  }}
-                  className="text-xs sm:text-sm font-bold text-slate-400 hover:text-[#011B51] uppercase tracking-wide transition-colors cursor-pointer"
-                >
-                  &larr; Back to Institutional Login
+              <div className="text-center lg:text-left pt-2">
+                <button type="button" onClick={() => { setView("login"); setMessage(""); setIsError(false); }} className="text-xs font-bold text-slate-400 hover:text-[#011B51] uppercase tracking-wide transition-colors cursor-pointer">
+                  &larr; Cancel and Return to Sign In
                 </button>
               </div>
             </div>
           )}
 
+          {/* RECOVERY STEP 2 VIEW */}
           {view === "recovery_set_pin" && (
-            <div className="animate-in fade-in duration-500">
-              <div className="mb-8 lg:mb-10 text-center lg:text-left">
+            <div className="animate-in fade-in duration-500 space-y-6">
+              <div className="text-center lg:text-left space-y-2">
                 <h2 className="text-2xl sm:text-3xl lg:text-4xl font-black text-[#011B51] uppercase tracking-tight">
                   Profile Recovery PIN Configuration
                 </h2>
-                <div className="w-12 lg:w-16 h-1 lg:h-1.5 bg-[#FED702] mt-3 lg:mt-4 mb-2 lg:mb-3 rounded-full mx-auto lg:mx-0" />
-                <p className="text-slate-500 text-xs sm:text-sm font-semibold uppercase tracking-wide">
+                <div className="w-12 lg:w-16 h-1 lg:h-1.5 bg-[#FED702] rounded-full mx-auto lg:mx-0" />
+                <p className="text-slate-400 text-xs sm:text-sm font-semibold uppercase tracking-wide">
                   Terminal active. Complete your final PIN configuration mapping rules.
                 </p>
               </div>
 
-              <form
-                onSubmit={handleRecoveryStep2CommitPin}
-                className="space-y-4 lg:space-y-6"
-              >
+              <form onSubmit={handleRecoveryStep2CommitPin} className="space-y-4">
                 {googleEmail && (
-                  <div className="p-4 bg-slate-100 border border-slate-200 rounded-xl cursor-not-allowed opacity-80">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">
-                      Authenticated Email
-                    </p>
-                    <p className="text-sm font-bold text-slate-500">{googleEmail}</p>
+                  <div className="p-3.5 bg-slate-100 border border-slate-200 rounded-xl cursor-not-allowed opacity-80 text-xs">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">Authenticated Email</p>
+                    <p className="font-bold text-slate-500">{googleEmail}</p>
                   </div>
                 )}
 
                 <div>
-                  <label className="block text-[10px] sm:text-xs font-bold text-[#011B51] uppercase tracking-wide mb-1.5 lg:mb-2 ml-1">
-                    Student ID
-                  </label>
-                  <input
-                    type="text"
-                    disabled
-                    className="w-full px-5 py-4 rounded-xl bg-slate-100 border border-slate-200 outline-none text-base font-medium text-slate-400 cursor-not-allowed"
-                    value={studentId}
-                  />
+                  <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-0.5">Student ID</label>
+                  <input type="text" disabled className="w-full px-4 py-3 rounded-xl bg-slate-100 border border-slate-200 outline-none text-sm font-medium text-slate-400 cursor-not-allowed" value={studentId} />
                 </div>
 
                 {googleEmail && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-[10px] sm:text-xs font-bold text-[#011B51] uppercase tracking-wide mb-1.5 lg:mb-2 ml-1">
-                        First Name
-                      </label>
-                      <input
-                        type="text"
-                        className="w-full px-5 py-4 rounded-xl bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed outline-none font-medium"
-                        value={firstName}
-                        disabled
-                      />
+                      <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-0.5">First Name</label>
+                      <input type="text" className="w-full px-4 py-3 rounded-xl bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed outline-none font-medium text-sm" value={firstName} disabled />
                     </div>
-
                     <div>
-                      <label className="block text-[10px] sm:text-xs font-bold text-[#011B51] uppercase tracking-wide mb-1.5 lg:mb-2 ml-1">
-                        Last Name
-                      </label>
-                      <input
-                        type="text"
-                        className="w-full px-5 py-4 rounded-xl bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed outline-none font-medium"
-                        value={lastName}
-                        disabled
-                      />
+                      <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-0.5">Last Name</label>
+                      <input type="text" className="w-full px-4 py-3 rounded-xl bg-slate-100 border border-slate-200 text-slate-400 cursor-not-allowed outline-none font-medium text-sm" value={lastName} disabled />
                     </div>
                   </div>
                 )}
 
                 <div>
-                  <label className="block text-[10px] sm:text-xs font-bold text-[#011B51] uppercase tracking-wide mb-1.5 lg:mb-2 ml-1">
-                    Set Recovery PIN (6 Digits)
-                  </label>
+                  <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1 ml-0.5">Set Recovery PIN (6 Digits)</label>
                   <input
                     type="password"
-                    placeholder="Type New or Current 6-Digit PIN"
+                    placeholder="Configure New 6-Digit PIN"
                     maxLength={6}
                     pattern="\d{6}"
-                    title="Must be exactly 6 digits"
-                    className="w-full px-4 lg:px-5 py-3.5 lg:py-4 rounded-xl bg-slate-50 border border-slate-200 outline-none text-center text-lg sm:text-xl font-mono font-bold tracking-[0.3em] focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all shadow-sm"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 outline-none text-center text-lg sm:text-xl font-mono font-bold tracking-[0.25em] focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all shadow-sm rounded-xl"
                     value={newRecoveryPin}
                     onChange={(e) => setNewRecoveryPin(e.target.value.replace(/\D/g, ""))}
                     required
                   />
                 </div>
 
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="w-full bg-[#011B51] hover:bg-[#022a7a] text-white font-bold py-3.5 lg:py-4 rounded-xl mt-6 lg:mt-8 transition-all shadow-md hover:shadow-lg lg:hover:-translate-y-0.5 border-b-4 border-[#A51A21] disabled:opacity-70 disabled:border-[#011B51] disabled:transform-none text-xs sm:text-sm uppercase tracking-wider cursor-pointer"
-                >
-                  {isSubmitting
-                    ? "Finalizing PIN..."
-                    : "Confirm PIN & Complete Setup"}
+                <button type="submit" disabled={isSubmitting} className="w-full bg-[#011B51] hover:bg-[#022a7a] text-white font-bold py-3.5 rounded-xl transition-all shadow-md border-b-4 border-[#A51A21] disabled:opacity-70 text-xs uppercase tracking-wider cursor-pointer">
+                  {isSubmitting ? "Finalizing PIN..." : "Confirm PIN & Complete Setup"}
                 </button>
               </form>
             </div>
           )}
 
+          {/* ATTENDANCE MAIN PORTAL WORKSPACE */}
           {view === "attendance" && (
-            <div className="animate-in fade-in duration-500">
-              <div className="mb-6 text-center lg:text-left">
-                <span className="inline-block px-3.5 py-1 mb-4 rounded-full bg-[#011B51]/10 text-[#011B51] text-xs font-black uppercase tracking-widest border border-[#011B51]/20">
-                  Student ID: {registeredId}
+            <div className="animate-in fade-in duration-500 space-y-6">
+              
+              {/* CENTERED STUDENT ID BADGE */}
+              <div className="flex justify-center">
+                <span className="inline-block px-4 py-1.5 rounded-full bg-slate-100 border border-slate-200 text-[#011B51] text-xs font-bold uppercase tracking-wider shadow-sm">
+                  STUDENT ID: {registeredId}
                 </span>
-
-                <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 mb-6">
-                  <button
-                    type="button"
-                    onClick={() => setStudentTab("checkin")}
-                    className={`flex-1 py-2.5 rounded-lg text-xs font-extrabold uppercase tracking-wider transition-all cursor-pointer ${studentTab === "checkin"
-                      ? "bg-[#011B51] text-white shadow-md"
-                      : "text-slate-500 hover:text-[#011B51]"
-                      }`}
-                  >
-                    Log Attendance
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStudentTab("history");
-                      setCurrentPage(1);
-                      if (registeredId) fetchHistory(registeredId);
-                    }}
-                    className={`flex-1 py-2.5 rounded-lg text-xs font-extrabold uppercase tracking-wider transition-all cursor-pointer ${studentTab === "history"
-                      ? "bg-[#011B51] text-white shadow-md"
-                      : "text-slate-500 hover:text-[#011B51]"
-                      }`}
-                  >
-                    My History
-                  </button>
-                </div>
               </div>
 
+              {/* SEGMENTED SWITCHER BAR */}
+              <div className="grid grid-cols-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setStudentTab("checkin")}
+                  className={`py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                    studentTab === "checkin"
+                      ? "bg-[#011B51] text-white shadow-sm"
+                      : "text-slate-500 hover:text-[#011B51]"
+                  }`}
+                >
+                  LOG ATTENDANCE
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStudentTab("history");
+                    setCurrentPage(1);
+                    if (registeredId) fetchHistory(registeredId);
+                  }}
+                  className={`py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${
+                    studentTab === "history"
+                      ? "bg-[#011B51] text-white shadow-sm"
+                      : "text-slate-500 hover:text-[#011B51]"
+                  }`}
+                >
+                  MY HISTORY
+                </button>
+              </div>
+
+              {/* LOG ATTENDANCE PANEL */}
               {studentTab === "checkin" ? (
                 <GeofenceGuard>
-                  <form
-                    onSubmit={handleLogAttendance}
-                    className="space-y-4 lg:space-y-6"
-                  >
-                    <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 flex items-center justify-center shadow-sm">
-                      <div className="flex items-center space-x-3 text-left">
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          className="h-6 w-6 text-[#011B51]"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          strokeWidth={2}
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                          />
-                        </svg>
-                        <div>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                            Local Standard Time
-                          </p>
-                          <p className="text-sm font-bold text-[#011B51]">
-                            {philippineTime || "Syncing clock..."}
-                          </p>
-                        </div>
+                  <form onSubmit={handleLogAttendance} className="space-y-5">
+                    
+                    {/* CLOCK CONTAINER WITH ICON & SUBHEADER */}
+                    <div className="bg-slate-50/80 border border-slate-200/80 rounded-2xl p-4 flex items-center justify-center gap-3 shadow-sm">
+                      <Clock className="w-5 h-5 text-[#011B51] shrink-0" />
+                      <div className="flex flex-col text-left">
+                        <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 leading-none mb-1">
+                          LOCAL STANDARD TIME
+                        </span>
+                        <span className="text-xs sm:text-sm font-bold text-slate-800 tracking-tight">
+                          {philippineTime || "Syncing clock..."}
+                        </span>
                       </div>
                     </div>
 
+                    {/* FACILITY SELECTION */}
                     <div>
-                      <label className="block text-[10px] sm:text-xs font-bold text-[#011B51] uppercase tracking-wide mb-1.5 lg:mb-2 ml-1">
-                        Facility Selection
+                      <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-0.5">
+                        FACILITY SELECTION
                       </label>
                       <select
-                        className="w-full px-4 lg:px-5 py-4 lg:py-5 rounded-xl bg-slate-50 border border-slate-200 outline-none cursor-pointer text-sm sm:text-base font-medium focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all shadow-sm appearance-none"
+                        className="w-full px-4 py-3.5 rounded-2xl bg-slate-50/80 border border-slate-200 outline-none cursor-pointer text-sm font-semibold text-slate-700 focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all shadow-sm appearance-none h-[50px]"
                         value={selectedRoom}
                         onChange={(e) => setSelectedRoom(e.target.value)}
                         required
@@ -1090,172 +1020,155 @@ function StudentPortalContent() {
                       </select>
                     </div>
 
+                    {/* ROOM PIN */}
                     <div>
-                      <label className="block text-[10px] sm:text-xs font-bold text-[#011B51] uppercase tracking-wide mb-1.5 lg:mb-2 ml-1">
-                        Room PIN
+                      <label className="block text-[10px] font-black uppercase tracking-wider text-slate-400 mb-1.5 ml-0.5">
+                        ROOM PIN
                       </label>
                       <input
                         type="text"
                         maxLength={4}
-                        className="w-full px-4 lg:px-5 py-3.5 lg:py-4 rounded-xl bg-slate-50 border border-slate-200 outline-none text-center text-lg sm:text-xl font-mono font-bold tracking-[0.3em] focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all shadow-sm"
+                        className="w-full px-4 py-3.5 rounded-2xl bg-slate-50/80 border border-slate-200 outline-none text-center text-lg font-mono font-bold tracking-[0.4em] focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all shadow-sm h-[50px]"
                         value={roomPin}
-                        onChange={(e) =>
-                          setRoomPin(e.target.value.replace(/\D/g, ""))
-                        }
-                        placeholder="0000"
+                        onChange={(e) => setRoomPin(e.target.value.replace(/\D/g, ""))}
+                        placeholder="0 0 0 0"
                         required
                       />
                     </div>
 
+                    {/* SUBMIT ACTION BUTTON */}
                     <button
                       type="submit"
                       disabled={isLogging || labRooms.length === 0}
-                      className="w-full bg-[#011B51] hover:bg-[#022a7a] text-white font-bold py-3.5 lg:py-4 rounded-xl mt-6 lg:mt-8 transition-all shadow-md hover:shadow-lg lg:hover:-translate-y-0.5 border-b-4 border-[#A51A21] disabled:opacity-70 disabled:border-[#011B51] disabled:transform-none text-xs sm:text-sm uppercase tracking-wider cursor-pointer"
+                      className="w-full bg-[#011B51] hover:bg-[#022a7a] text-white font-bold py-4 rounded-2xl transition-all shadow-md border-b-4 border-[#A51A21] disabled:opacity-70 text-xs uppercase tracking-wider cursor-pointer h-[50px] flex items-center justify-center mt-2"
                     >
-                      {isLogging
-                        ? "Verifying Keys..."
-                        : "Securely Log Attendance"}
+                      {isLogging ? "SIGNING PAYLOAD..." : "SECURELY LOG ATTENDANCE"}
                     </button>
                   </form>
                 </GeofenceGuard>
               ) : (
+                /* HISTORY LIST LOG ROWS WITH PAGINATION */
                 <div className="space-y-4 animate-in fade-in duration-300">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
-                    <div className="flex items-center space-x-2">
-                      <h3 className="text-sm font-extrabold text-[#011B51] uppercase tracking-wide">
-                        Check-In History
-                      </h3>
-                      <span className="text-[10px] font-bold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
-                        {processedLogs.length} Total
-                      </span>
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="text"
-                        placeholder="Search course or room..."
-                        value={historySearch}
-                        onChange={(e) => {
-                          setHistorySearch(e.target.value);
-                          setCurrentPage(1);
-                        }}
-                        className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-[#011B51] transition-all w-full sm:w-48"
-                      />
-                    </div>
-                  </div>
+                  <input
+                    type="text"
+                    placeholder="Search history logs..."
+                    value={historySearch}
+                    onChange={(e) => {
+                      setHistorySearch(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="w-full px-4 py-3 text-xs font-medium bg-slate-50/80 border border-slate-200 rounded-2xl outline-none focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all shadow-sm"
+                  />
 
                   {isLoadingHistory ? (
-                    <div className="p-12 text-center text-slate-400 font-bold text-xs uppercase tracking-widest animate-pulse">
-                      Loading attendance records...
+                    <div className="py-12 text-center text-slate-400 font-bold text-xs uppercase tracking-widest animate-pulse">
+                      Loading history logs...
                     </div>
                   ) : processedLogs.length === 0 ? (
-                    <div className="p-8 bg-slate-50 border border-slate-200 rounded-xl text-center text-slate-500 font-medium text-xs">
-                      {historySearch
-                        ? "No logs match your search filter."
-                        : "No attendance logs recorded for this student ID."}
+                    <div className="py-10 text-center text-xs font-bold text-slate-400 uppercase tracking-widest bg-slate-50/80 rounded-2xl border border-dashed border-slate-200">
+                      No records matching filters
                     </div>
                   ) : (
                     <>
-                      <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1.5 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-slate-100 [&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-thumb]:rounded-full">
+                      <div className="space-y-3">
                         {paginatedLogs.map((log) => {
                           const isLate = log.status === "LATE";
-                          const isManual =
-                            log.signature && log.signature.includes("OVERRIDE");
+                          const isManual = log.signature && log.signature.includes("OVERRIDE");
 
                           return (
                             <div
                               key={log.id}
-                              className="p-4 bg-slate-50 border border-slate-200 rounded-xl hover:border-slate-300 transition-all hover:shadow-sm"
+                              className="p-4 bg-slate-50/80 border border-slate-200/80 rounded-2xl flex items-center justify-between text-xs transition-all hover:border-slate-300 shadow-sm"
                             >
-                              <div className="flex justify-between items-start mb-1">
-                                <span className="font-bold text-sm text-[#011B51]">
-                                  {log.schedule?.course_code || "CLASS SESSION"}{" "}
-                                  (Sec {log.schedule?.section || "N/A"})
+                              <div className="space-y-1 truncate pr-3">
+                                <span className="font-extrabold text-slate-900 block truncate text-sm">
+                                  {log.schedule?.course_code || "CLASS SESSION"}
                                 </span>
-                                <span
-                                  className={`px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider border ${isLate
-                                    ? "bg-amber-50 text-amber-800 border-amber-200"
-                                    : "bg-emerald-50 text-emerald-800 border-emerald-200"
-                                    }`}
-                                >
-                                  {isLate ? "LATE" : "ON TIME"}
+                                <span className="text-slate-500 font-semibold block truncate text-[11px]">
+                                  {log.schedule?.lab_room} • Sec {log.schedule?.section}
+                                </span>
+                                <span className="text-[10px] text-slate-400 block font-medium">
+                                  {new Date(log.timestamp).toLocaleString("en-US", {
+                                    month: "short",
+                                    day: "numeric",
+                                    year: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                    hour12: true,
+                                  })}
                                 </span>
                               </div>
 
-                              <p className="text-xs font-medium text-slate-600">
-                                Facility: {log.schedule?.lab_room || "Laboratory"}
-                              </p>
-
-                              {isManual && (
-                                <span className="inline-block mt-1 px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-200">
-                                  Manual Override
+                              <div className="flex flex-col items-end gap-1.5 shrink-0">
+                                <span
+                                  className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+                                    isLate
+                                      ? "bg-amber-50 text-amber-800 border-amber-200"
+                                      : "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                  }`}
+                                >
+                                  {isLate ? "LATE" : "ON TIME"}
                                 </span>
-                              )}
-
-                              <p className="text-[11px] font-medium text-slate-400 mt-2">
-                                {new Date(log.timestamp).toLocaleString("en-US", {
-                                  weekday: "short",
-                                  month: "short",
-                                  day: "numeric",
-                                  year: "numeric",
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}
-                              </p>
+                                {isManual && (
+                                  <span className="px-2 py-0.5 rounded-full text-[8px] font-bold uppercase tracking-widest bg-blue-50 text-blue-600 border border-blue-100">
+                                    Manual
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           );
                         })}
                       </div>
 
-                      {totalPages > 1 && (
-                        <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-xs font-bold text-slate-500">
-                          <button
-                            onClick={() =>
-                              setCurrentPage((p) => Math.max(1, p - 1))
-                            }
-                            disabled={currentPage === 1}
-                            className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent transition-colors cursor-pointer"
-                          >
-                            Previous
-                          </button>
-                          <span>
-                            Page {currentPage} of {totalPages}
-                          </span>
-                          <button
-                            onClick={() =>
-                              setCurrentPage((p) => Math.min(totalPages, p + 1))
-                            }
-                            disabled={currentPage === totalPages}
-                            className="px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent transition-colors cursor-pointer"
-                          >
-                            Next
-                          </button>
-                        </div>
-                      )}
+                      {/* PAGINATION CONTROL BAR */}
+                      <div className="flex items-center justify-between pt-3 border-t border-slate-100 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                        <button
+                          type="button"
+                          onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                          disabled={currentPage === 1}
+                          className="px-3.5 py-1.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:hover:bg-transparent transition-all cursor-pointer disabled:cursor-not-allowed"
+                        >
+                          Previous
+                        </button>
+                        <span className="text-slate-500 font-semibold">
+                          Page {currentPage} of {totalPages}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                          disabled={currentPage === totalPages}
+                          className="px-3.5 py-1.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-30 disabled:hover:bg-transparent transition-all cursor-pointer disabled:cursor-not-allowed"
+                        >
+                          Next
+                        </button>
+                      </div>
                     </>
                   )}
                 </div>
               )}
 
-              <div className="mt-8 pt-6 border-t border-slate-100 text-center">
+              {/* CENTERED DEAUTHORIZE DEVICE TRIGGER */}
+              <div className="pt-4 text-center">
                 <button
                   type="button"
                   onClick={() => setShowDeauthModal(true)}
-                  className="text-xs font-bold text-slate-400 hover:text-rose-600 uppercase tracking-wider transition-colors cursor-pointer underline underline-offset-4"
+                  className="text-xs font-bold text-slate-400 hover:text-rose-600 uppercase tracking-widest transition-colors cursor-pointer underline underline-offset-4"
                 >
-                  Deauthorize This Device
+                  DEAUTHORIZE THIS DEVICE
                 </button>
               </div>
+
             </div>
           )}
 
+          {/* NOTIFICATION FEEDBACK BANNER */}
           {message && (
             <div
-              className={`mt-6 lg:mt-8 p-4 lg:p-5 rounded-xl text-center text-xs sm:text-sm font-bold uppercase tracking-wide border-2 ${isError
+              className={`p-4 rounded-xl text-center text-xs font-bold uppercase tracking-wide border-2 mt-6 ${isError
                 ? "bg-rose-50 text-rose-700 border-rose-200"
                 : message.includes("LATE")
                   ? "bg-amber-50 text-amber-700 border-amber-200"
-                  : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  : "bg-emerald-50 text-emerald-800 border-emerald-200"
                 }`}
             >
               {message}
@@ -1264,48 +1177,36 @@ function StudentPortalContent() {
         </div>
       </div>
 
+      {/* DEAUTHORIZATION MODAL DIALOG */}
       {showDeauthModal && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-100 text-center space-y-4">
-            <div className="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto">
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-6 w-6"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                />
-              </svg>
+            <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mx-auto border border-rose-100">
+              <LogOut size={18} />
             </div>
 
             <div>
-              <h3 className="text-lg font-black text-[#011B51] uppercase tracking-tight">
+              <h3 className="text-base font-black text-[#011B51] uppercase tracking-wide">
                 Deauthorize Device?
               </h3>
-              <p className="text-xs text-slate-500 font-medium mt-2 leading-relaxed">
+              <p className="text-xs text-slate-500 font-medium mt-1.5 leading-relaxed">
                 This action deletes your local cryptographic security keys. You
                 will need to authenticate again to check in.
               </p>
             </div>
 
-            <div className="flex space-x-3 pt-2">
+            <div className="flex space-x-3 pt-2 text-xs font-bold uppercase tracking-wider">
               <button
                 type="button"
                 onClick={() => setShowDeauthModal(false)}
-                className="flex-1 py-3 px-4 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs uppercase tracking-wider hover:bg-slate-50 transition-colors cursor-pointer"
+                className="flex-1 py-2.5 px-4 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={executeDeauthorization}
-                className="flex-1 py-3 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs uppercase tracking-wider transition-colors shadow-md cursor-pointer"
+                className="flex-1 py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-700 text-white shadow-md transition-colors cursor-pointer"
               >
                 Deauthorize
               </button>

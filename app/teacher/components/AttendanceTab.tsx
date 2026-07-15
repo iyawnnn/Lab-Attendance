@@ -15,6 +15,7 @@ import {
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { manuallyAdmitStudent } from "@/app/actions/teacher";
+import { usePusherEvent } from "@/hooks/usePusher"; // Integrated clean real-time hook[cite: 1]
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -143,8 +144,10 @@ interface AttendanceTabProps {
   teacherUserId: string;
 }
 
-export default function AttendanceTab({ logs = [], schedules = [], teacherUserId }: AttendanceTabProps) {
+export default function AttendanceTab({ logs: initialLogs = [], schedules = [], teacherUserId }: AttendanceTabProps) {
   const router = useRouter();
+  const [logs, setLogs] = useState<any[]>(initialLogs); // Stateful list updated in real-time[cite: 1]
+
   const [searchTerm, setSearchTerm] = useState("");
   const [dayFilter, setDayFilter] = useState("");
   const [classFilter, setClassFilter] = useState("");
@@ -162,16 +165,55 @@ export default function AttendanceTab({ logs = [], schedules = [], teacherUserId
 
   const logsPerPage = 10;
 
-  // Real-time background sync every 4 seconds
+  // Sync state cleanly if initial prop data changes (e.g. native router navigation revalidations)
+  useEffect(() => {
+    setLogs(initialLogs);
+  }, [initialLogs]);
+
+  // Real-time safety sync relaxed to 30s since active WebSockets listen live[cite: 1]
   useEffect(() => {
     const interval = setInterval(() => {
       if (document.visibilityState === "visible") {
         router.refresh();
       }
-    }, 4000);
+    }, 30000);
 
     return () => clearInterval(interval);
   }, [router]);
+
+  // Handle incoming Pusher broadcasts state-side[cite: 1]
+  usePusherEvent<any>("attendance-channel", "new-attendance", (newLog) => {
+    setLogs((prev) => {
+      // Prevent duplicate log rendering if pusher triggers alongside page refreshing
+      if (prev.some((log) => log.id === newLog.id)) {
+        return prev;
+      }
+
+      const nameParts = newLog.studentName ? newLog.studentName.split(" ") : ["", ""];
+      const first_name = nameParts[0] || "";
+      const last_name = nameParts.slice(1).join(" ") || "";
+
+      const formattedLog = {
+        id: newLog.id,
+        timestamp: newLog.createdAt || new Date().toISOString(),
+        status: newLog.status || "ON_TIME",
+        signature: newLog.signature || "",
+        student: {
+          student_id: newLog.studentId,
+          first_name,
+          last_name,
+        },
+        schedule: {
+          id: newLog.scheduleId,
+          course_code: newLog.courseCode,
+          section: newLog.section,
+          lab_room: newLog.roomName,
+        }
+      };
+
+      return [formattedLog, ...prev];
+    });
+  });
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -498,7 +540,6 @@ export default function AttendanceTab({ logs = [], schedules = [], teacherUserId
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-4 relative z-10">
         <div className="flex flex-col lg:flex-row gap-2.5 items-center justify-between w-full">
           <div className="flex flex-wrap lg:flex-nowrap gap-2 w-full lg:flex-1 items-center min-w-0">
-            {/* Shortened input bar style parameters */}
             <input
               type="text"
               placeholder="Search student or course..."
