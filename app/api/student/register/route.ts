@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { randomUUID, createHash } from "crypto";
+import { createHash, randomUUID } from "crypto";
 
 export async function POST(request: Request) {
   console.log("[REGISTER_STUDENT] Onboarding registration request received.");
@@ -23,26 +23,26 @@ export async function POST(request: Request) {
       );
     }
 
-    // ZERO-SAFE FIX: Ensure studentId is strictly evaluated as a trimmed raw String.[cite: 1]
     const cleanStudentId = String(studentId).trim();
 
-    // PIN ZERO-SAFE PROTECTION: Pad to exactly 6 characters and hash using SHA-256[cite: 1]
+    // Standardize text strings to uppercase to maintain unified database formatting
+    const cleanFirstName = String(firstName || "").trim().toUpperCase();
+    const cleanLastName = String(lastName || "").trim().toUpperCase();
+
+    // Pad recovery values to handle potential leading zeros and hash via SHA-256
     const normalizedPin = String(recoveryPin).trim().padStart(6, "0");
     const hashedPin = createHash("sha256").update(normalizedPin).digest("hex");
 
     const newSessionToken = randomUUID();
 
-    // Check if student already exists to manage reboarding vs block collisions
     const existingStudent = await prisma.student.findUnique({
       where: { student_id: cleanStudentId },
     });
 
     if (existingStudent) {
-      // FIX: Account Recovery Reboarding Flow (Wiped device public keys)[cite: 1]
       if (!existingStudent.public_key || existingStudent.public_key === "") {
         console.log(`[REGISTER_STUDENT] Student "${cleanStudentId}" re-onboarding via device recovery.`);
         
-        // 🔴 FIX: Verify the entered PIN matches the original recovery PIN in the database before binding
         const dbHashPin = existingStudent.recovery_pin ? existingStudent.recovery_pin.trim() : "";
         
         if (dbHashPin && dbHashPin !== hashedPin) {
@@ -52,12 +52,11 @@ export async function POST(request: Request) {
           );
         }
 
-        // Pin is verified, bind the new public key and assign a clean session token[cite: 1]
         await prisma.student.update({
           where: { student_id: cleanStudentId },
           data: {
             public_key: publicKey,
-            session_token: newSessionToken, // Establishes pristine session state[cite: 1]
+            session_token: newSessionToken,
           },
         });
 
@@ -70,7 +69,6 @@ export async function POST(request: Request) {
           { status: 200 }
         );
       } else {
-        // Prevent generic unauthorized duplicate collisions
         return NextResponse.json(
           { success: false, message: "This Student ID is already registered to an active device." },
           { status: 409 }
@@ -80,13 +78,12 @@ export async function POST(request: Request) {
 
     console.log(`[REGISTER_STUDENT] Committing credentials securely for Student ID: "${cleanStudentId}"`);
 
-    // Create pristine secure student record mapping the payload dynamics cleanly
     await prisma.student.create({
       data: {
-        student_id: cleanStudentId, // Preserves prepended zeros safely[cite: 1]
+        student_id: cleanStudentId,
         email: String(email).trim().toLowerCase(), 
-        first_name: firstName,
-        last_name: lastName,
+        first_name: cleanFirstName,
+        last_name: cleanLastName,
         public_key: publicKey,
         session_token: newSessionToken,
         recovery_pin: hashedPin,

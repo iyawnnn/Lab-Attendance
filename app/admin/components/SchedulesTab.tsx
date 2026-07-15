@@ -18,11 +18,15 @@ import { usePusherEvent } from "@/hooks/usePusher";
 // --- Predefined University of the Assumption Laboratory Rooms ---
 const UA_LAB_ROOMS = [
   "C204 - ROBOTICS 1",
-  "C301 - CISCO LAB 1",
-  "P312 - COMPUTER LAB 6",
-  "C202 - COMPUTER LAB 2",
-  "C203 - COMPUTER LAB 3",
-  "C302 - MULTIMEDIA LAB"
+  "C205 - ROBOTICS 2",
+  "C301 - CISCO LAB1",
+  "C302 - SPEECH LAB",
+  "P302 - OPEN COMPUTER LAB",
+  "P303 - CISCO PRACTICE",
+  "P304 - COMPUTER LAB 3",
+  "P305 - Multimedia Lab",
+  "P311 - COMPUTER LAB 5",
+  "P312 - Computer Lab 6"
 ];
 
 function convert24To12(time24: string): string {

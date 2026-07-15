@@ -63,9 +63,9 @@ export async function POST(req: Request) {
 
     if (!student.public_key || student.public_key === "") {
       return NextResponse.json(
-        { 
-          success: false, 
-          message: "DEVICE_REVOKED: Your device authorization has been revoked." 
+        {
+          success: false,
+          message: "DEVICE_REVOKED: Your device authorization has been revoked."
         },
         { status: 403 }
       );
@@ -138,15 +138,16 @@ export async function POST(req: Request) {
 
     // Safely trigger real-time updates for dashboards
     try {
-      // Resolve student fallback display name dynamically[cite: 1]
-      const studentDisplayName = 
-        (student as any).name || 
-        `${(student as any).first_name || ""} ${(student as any).last_name || ""}`.trim() || 
+      const studentDisplayName =
+        (student as any).name ||
+        `${(student as any).first_name || ""} ${(student as any).last_name || ""}`.trim() ||
         studentId;
 
       await pusherServer.trigger("attendance-channel", "new-attendance", {
         id: newLog.id,
         studentName: studentDisplayName,
+        studentFirstName: student.first_name,
+        studentLastName: student.last_name,
         studentId: studentId,
         status: "ON_TIME",
         roomName: labRoom,
@@ -155,7 +156,6 @@ export async function POST(req: Request) {
         createdAt: newLog.timestamp,
       });
     } catch (pusherError) {
-      // Log error internally; do not block response payload from serving success to student[cite: 1]
       console.error("[REALTIME_BROADCAST_ERROR] Failed to push live attendance log:", pusherError);
     }
 
@@ -166,9 +166,9 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("Attendance API Error:", error);
     return NextResponse.json(
-      { 
-        success: false, 
-        message: error?.message ? `Server Error: ${error.message}` : "Server error while processing attendance." 
+      {
+        success: false,
+        message: error?.message ? `Server Error: ${error.message}` : "Server error while processing attendance."
       },
       { status: 500 }
     );

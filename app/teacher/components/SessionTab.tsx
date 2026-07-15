@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Maximize, Minimize } from "lucide-react";
-import { generateSessionPin } from "@/app/actions/teacher";
-import { usePusherEvent } from "@/hooks/usePusher"; // Integrated clean real-time hook
+import { Maximize, Minimize, XCircle } from "lucide-react"; // Added XCircle icon
+import { generateSessionPin, clearSessionPin } from "@/app/actions/teacher"; // Added clearSessionPin
+import { usePusherEvent } from "@/hooks/usePusher";
 
 interface Schedule {
   id: number | string;
@@ -20,6 +20,14 @@ interface SessionTabProps {
   teacherId: string;
 }
 
+// 🟢 NEW: Formats raw seconds into MM:SS if over 60 seconds
+function formatTimeLeft(totalSeconds: number) {
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
 export default function SessionTab({ schedules, teacherId }: SessionTabProps) {
   const router = useRouter();
   const [selectedScheduleId, setSelectedScheduleId] = useState<number | string>("");
@@ -27,14 +35,13 @@ export default function SessionTab({ schedules, teacherId }: SessionTabProps) {
   const [timeLeft, setTimeLeft] = useState<number>(0);
   const [error, setError] = useState<string>("");
   const [isGenerating, setIsGenerating] = useState(false);
-
+  
+  const [durationSeconds, setDurationSeconds] = useState<number>(60);
   const [selectedDay, setSelectedDay] = useState<string>("");
   
   const [isFullscreen, setIsFullscreen] = useState(false);
   const fullscreenRef = useRef<HTMLDivElement>(null);
 
-  // --- Pusher Real-Time Background Synchronization ---
-  // Silently refresh the class roster choices if an administrator alters schedule tables[cite: 1]
   usePusherEvent("schedules-channel", "schedule-created", () => router.refresh());
   usePusherEvent("schedules-channel", "schedule-updated", () => router.refresh());
   usePusherEvent("schedules-channel", "schedule-deleted", () => router.refresh());
@@ -138,13 +145,14 @@ export default function SessionTab({ schedules, teacherId }: SessionTabProps) {
     const result = await generateSessionPin(
       Number(selectedScheduleId),
       teacherId,
+      durationSeconds
     );
 
     if (result.success && result.pin && result.expiresAt) {
       setActivePin(result.pin);
 
-      const displayExpiryDate = Date.now() + 60 * 1000;
-      setTimeLeft(60);
+      const displayExpiryDate = Date.now() + durationSeconds * 1000;
+      setTimeLeft(durationSeconds);
 
       localStorage.setItem(`activeSessionPin_${teacherId}`, result.pin);
       localStorage.setItem(
@@ -159,6 +167,24 @@ export default function SessionTab({ schedules, teacherId }: SessionTabProps) {
       setError(result.message || "Failed to initialize session.");
     }
     setIsGenerating(false);
+  }
+
+  // 🟢 NEW: Handles stopping the timer early
+  async function handleStopTimer() {
+    if (confirm("Are you sure you want to stop the verification session early? Students will no longer be able to log in with this PIN.")) {
+      // 1. Wipe local state immediately so UI updates instantly
+      setTimeLeft(0);
+      setActivePin(null);
+      clearActiveSession();
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(console.error);
+      }
+
+      // 2. Clear from database
+      if (selectedScheduleId) {
+        await clearSessionPin(Number(selectedScheduleId));
+      }
+    }
   }
 
   const toggleFullscreen = async () => {
@@ -188,7 +214,7 @@ export default function SessionTab({ schedules, teacherId }: SessionTabProps) {
               </h2>
               <div className="w-16 h-1.5 bg-[#FED702] mt-3 mb-2 rounded-full mx-auto sm:mx-0"></div>
               <p className="text-slate-500 text-sm font-medium">
-                Select your current class to generate a 60-second secure entry PIN.
+                Select your current class to generate a secure entry PIN for student attendance.
               </p>
             </div>
 
@@ -292,16 +318,39 @@ export default function SessionTab({ schedules, teacherId }: SessionTabProps) {
               </div>
             )}
 
-            <div className="pt-4 border-t border-slate-100">
-              <button
-                onClick={handleGeneratePin}
-                disabled={isGenerating || !selectedScheduleId}
-                className="w-full text-white font-bold py-4 rounded-xl transition-all bg-[#011B51] hover:bg-[#022a7a] border-b-4 border-[#A51A21] disabled:opacity-70 text-sm uppercase tracking-widest cursor-pointer shadow-md"
-              >
-                {isGenerating
-                  ? "Generating Verification Pin..."
-                  : "Start 60-Second Verification"}
-              </button>
+            <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row gap-4">
+              <div className="flex flex-col sm:w-1/3">
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1 ml-1">
+                  Timer Duration
+                </label>
+                <select
+                  value={durationSeconds}
+                  onChange={(e) => setDurationSeconds(Number(e.target.value))}
+                  disabled={isGenerating}
+                  className="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 outline-none text-sm font-bold text-slate-700 focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all cursor-pointer h-[52px]"
+                >
+                  <option value={60}>1 Minute (60s)</option>
+                  <option value={180}>3 Minutes (180s)</option>
+                  <option value={300}>5 Minutes (300s)</option>
+                  <option value={600}>10 Minutes (600s)</option>
+                  <option value={900}>15 Minutes (Max)</option>
+                </select>
+              </div>
+
+              <div className="flex flex-col flex-1">
+                <label className="text-[10px] font-bold text-transparent uppercase tracking-widest mb-1 hidden sm:block">
+                  Action
+                </label>
+                <button
+                  onClick={handleGeneratePin}
+                  disabled={isGenerating || !selectedScheduleId}
+                  className="w-full text-white font-bold px-4 rounded-xl transition-all bg-[#011B51] hover:bg-[#022a7a] border-b-4 border-[#A51A21] disabled:opacity-70 text-sm uppercase tracking-widest cursor-pointer shadow-md h-[52px] flex items-center justify-center"
+                >
+                  {isGenerating
+                    ? "Generating Verification Pin..."
+                    : `Start Verification`}
+                </button>
+              </div>
             </div>
           </div>
         ) : (
@@ -394,9 +443,18 @@ export default function SessionTab({ schedules, teacherId }: SessionTabProps) {
                     className={`relative inline-flex rounded-full h-5 w-5 ${timeLeft <= 10 ? "bg-rose-600" : "bg-[#FED702]"}`}
                   ></span>
                 </span>
-                <span>{timeLeft}s Remaining</span>
+                {/* 🟢 NEW: Renders the formatted MM:SS string */}
+                <span>{formatTimeLeft(timeLeft)} Remaining</span>
               </span>
             </div>
+
+            {/* 🟢 NEW: Stop Verification Button */}
+            <button
+              onClick={handleStopTimer}
+              className="mt-8 px-6 py-2.5 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200 font-bold uppercase tracking-widest text-xs transition-colors flex items-center gap-2 cursor-pointer shadow-sm"
+            >
+              <XCircle size={16} /> Stop Verification Early
+            </button>
           </div>
         )}
       </div>

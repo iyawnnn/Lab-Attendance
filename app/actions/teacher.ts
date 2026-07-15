@@ -67,9 +67,26 @@ export async function getTeacherDashboardData(teacherUserId: string) {
   }
 }
 
+// 🟢 NEW: Instantly kills an active PIN session in the database
+export async function clearSessionPin(scheduleId: number) {
+  try {
+    await prisma.schedule.update({
+      where: { id: scheduleId },
+      data: {
+        active_pin: null,
+        pin_expires_at: null,
+      },
+    });
+    return { success: true };
+  } catch (error) {
+    return { success: false, message: "Failed to stop session." };
+  }
+}
+
 export async function generateSessionPin(
   scheduleId: number,
-  teacherUserId: string
+  teacherUserId: string,
+  durationSeconds: number // 🟢 Pass the teacher's custom time here
 ) {
   try {
     const schedule = await prisma.schedule.findUnique({
@@ -80,8 +97,14 @@ export async function generateSessionPin(
       return { success: false, message: "Schedule not found." };
     }
 
+    // 1. Strictly enforce the 60s to 900s (15 min) limit on the backend
+    const safeDuration = Math.max(60, Math.min(durationSeconds, 900));
+
+    // 2. Generate 4-digit PIN (1000 - 9999)
     const pin = Math.floor(1000 + Math.random() * 9000).toString();
-    const dbExpiresAt = new Date(Date.now() + 70 * 1000);
+    
+    // 3. Keep your 10-second network buffer for the database
+    const dbExpiresAt = new Date(Date.now() + (safeDuration + 10) * 1000);
 
     await prisma.schedule.update({
       where: { id: scheduleId },
@@ -90,7 +113,7 @@ export async function generateSessionPin(
 
     await logAdminAction(
       "GENERATE_SESSION_PIN",
-      `Teacher generated 60s PIN for room ${schedule.lab_room} (${schedule.course_code}).`,
+      `Teacher generated a ${safeDuration}s PIN for room ${schedule.lab_room} (${schedule.course_code}).`,
       String(scheduleId),
       teacherUserId
     );
@@ -98,7 +121,8 @@ export async function generateSessionPin(
     return {
       success: true,
       pin,
-      expiresAt: new Date(Date.now() + 60 * 1000).toISOString(),
+      // 4. Return the exact time to the client UI so the countdown is perfectly accurate
+      expiresAt: new Date(Date.now() + safeDuration * 1000).toISOString(),
     };
   } catch (error) {
     return { success: false, message: "Failed to generate session PIN." };

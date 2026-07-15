@@ -15,7 +15,7 @@ import {
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { manuallyAdmitStudent } from "@/app/actions/teacher";
-import { usePusherEvent } from "@/hooks/usePusher"; // Integrated clean real-time hook[cite: 1]
+import { usePusherEvent } from "@/hooks/usePusher";
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -146,7 +146,7 @@ interface AttendanceTabProps {
 
 export default function AttendanceTab({ logs: initialLogs = [], schedules = [], teacherUserId }: AttendanceTabProps) {
   const router = useRouter();
-  const [logs, setLogs] = useState<any[]>(initialLogs); // Stateful list updated in real-time[cite: 1]
+  const [logs, setLogs] = useState<any[]>(initialLogs);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [dayFilter, setDayFilter] = useState("");
@@ -165,12 +165,10 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
 
   const logsPerPage = 10;
 
-  // Sync state cleanly if initial prop data changes (e.g. native router navigation revalidations)
   useEffect(() => {
     setLogs(initialLogs);
   }, [initialLogs]);
 
-  // Real-time safety sync relaxed to 30s since active WebSockets listen live[cite: 1]
   useEffect(() => {
     const interval = setInterval(() => {
       if (document.visibilityState === "visible") {
@@ -181,17 +179,15 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
     return () => clearInterval(interval);
   }, [router]);
 
-  // Handle incoming Pusher broadcasts state-side[cite: 1]
   usePusherEvent<any>("attendance-channel", "new-attendance", (newLog) => {
     setLogs((prev) => {
-      // Prevent duplicate log rendering if pusher triggers alongside page refreshing
       if (prev.some((log) => log.id === newLog.id)) {
         return prev;
       }
 
-      const nameParts = newLog.studentName ? newLog.studentName.split(" ") : ["", ""];
-      const first_name = nameParts[0] || "";
-      const last_name = nameParts.slice(1).join(" ") || "";
+      // Read explicit properties with fallbacks for safe parsing
+      const firstName = newLog.studentFirstName || (newLog.studentName ? newLog.studentName.split(" ")[0] : "");
+      const lastName = newLog.studentLastName || (newLog.studentName ? newLog.studentName.split(" ").slice(1).join(" ") : "");
 
       const formattedLog = {
         id: newLog.id,
@@ -200,8 +196,8 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
         signature: newLog.signature || "",
         student: {
           student_id: newLog.studentId,
-          first_name,
-          last_name,
+          first_name: firstName.trim().toUpperCase(),
+          last_name: lastName.trim().toUpperCase(),
         },
         schedule: {
           id: newLog.scheduleId,
@@ -239,7 +235,6 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
     { id: "LATE", label: "Late" }
   ];
 
-  // Dynamic Class filtering option based on chosen day criteria
   const scheduleOptions = useMemo(() => {
     let actionableSchedules = schedules;
 
@@ -247,7 +242,6 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
       actionableSchedules = schedules.filter(sched => {
         if (!sched.date) return false;
         
-        // Match weekday name criteria or calculate day string values from hard-coded dates
         if (sched.date.toLowerCase() === dayFilter.toLowerCase()) return true;
         
         if (!isNaN(Date.parse(sched.date))) {
@@ -267,7 +261,6 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
     }));
   }, [schedules, dayFilter]);
 
-  // Handle active choice eviction if filtered schedule set alters completely
   useEffect(() => {
     if (classFilter && !scheduleOptions.some(opt => opt.id === classFilter)) {
       setClassFilter("");
@@ -281,7 +274,7 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
   const filteredLogs = useMemo(() => {
     return logs.filter((log) => {
       const studentName =
-        `${log.student.first_name} ${log.student.last_name}`.toLowerCase();
+        `${log.student.first_name || ""} ${log.student.last_name || ""}`.toLowerCase();
       const studentId = log.student.student_id.toLowerCase();
       const courseCode = log.schedule?.course_code?.toLowerCase() || "";
 
@@ -380,8 +373,8 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
         new Date(log.timestamp).toLocaleDateString(),
         new Date(log.timestamp).toLocaleTimeString(),
         log.student.student_id,
-        log.student.last_name,
-        log.student.first_name,
+        (log.student.last_name || "").trim().toUpperCase(),
+        (log.student.first_name || "").trim().toUpperCase(),
         log.schedule?.course_code || "N/A",
         log.schedule?.section || "N/A",
         log.schedule?.lab_room || "N/A",
@@ -482,9 +475,11 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
 
     const tableRows = filteredLogs.map((log) => {
       const isManual = log.signature && log.signature.includes("OVERRIDE");
+      const sLastName = (log.student.last_name || "").trim().toUpperCase();
+      const sFirstName = (log.student.first_name || "").trim().toUpperCase();
       return [
         log.student.student_id,
-        `${log.student.last_name}, ${log.student.first_name}`,
+        `${sLastName}, ${sFirstName}`,
         `${log.schedule?.course_code || "N/A"} (${log.schedule?.section || "N/A"})`,
         log.schedule?.lab_room || "N/A",
         log.status === "ON_TIME" ? "ON TIME" : "LATE",
@@ -702,6 +697,8 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
               ) : (
                 paginatedLogs.map((log: any) => {
                   const isManual = log.signature && log.signature.includes("OVERRIDE");
+                  const sLastName = (log.student.last_name || "").trim().toUpperCase();
+                  const sFirstName = (log.student.first_name || "").trim().toUpperCase();
                   
                   return (
                     <tr
@@ -710,7 +707,7 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
                     >
                       <td className="px-6 py-4">
                         <span className="block font-bold text-slate-900">
-                          {log.student.last_name}, {log.student.first_name}
+                          {sLastName}, {sFirstName}
                         </span>
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
                           {log.student.student_id}

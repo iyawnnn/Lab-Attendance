@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 
 export async function POST(request: Request) {
   console.log("[AUTH_GOOGLE] Incoming authentication request received.");
-  
+
   try {
     const body = await request.json();
     const { idToken } = body;
@@ -76,13 +76,13 @@ export async function POST(request: Request) {
       return NextResponse.json({
         isRegistered: false,
         email: email,
-        firstName: payload.given_name || "",
-        lastName: payload.family_name || ""
+        firstName: (payload.given_name || "").trim().toUpperCase(),
+        lastName: (payload.family_name || "").trim().toUpperCase()
       }, { status: 200 });
     }
 
     console.log(`[AUTH_GOOGLE] Student found. Fetching active record data for ID: ${student.student_id}`);
-    
+
     return NextResponse.json({
       isRegistered: true,
       studentId: student.student_id,
