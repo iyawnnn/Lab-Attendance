@@ -31,7 +31,13 @@ async function main() {
 
   console.log(`Found ${uniqueProfessors.length} unique professors. Generating accounts...`);
 
-  const defaultPassword = await bcrypt.hash('password123', 10);
+  // Securely fetch the default password from the environment
+  const adminPassword = process.env.MASTER_ADMIN_PASSWORD;
+  if (!adminPassword) {
+    throw new Error("CRITICAL: MASTER_ADMIN_PASSWORD environment variable is missing. Aborting seed operation.");
+  }
+
+  const defaultPassword = await bcrypt.hash(adminPassword, 10);
   
   // 4. Create User accounts and map their names to their new database IDs
   const teacherIdMap = new Map<string, number>();
@@ -78,7 +84,7 @@ async function main() {
   }
 
   console.log(`Seeding complete. ${assignedCount} classes assigned, ${unassignedCount} classes unassigned.`);
-  console.log('Temporary password for all staff is: password123');
+  console.log('Temporary passwords for all staff have been securely generated from the environment configuration.');
 }
 
 main()

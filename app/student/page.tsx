@@ -27,6 +27,8 @@ interface AttendanceRecord {
 
 const ITEMS_PER_PAGE = 5;
 const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
+const ALLOWED_DOMAINS = process.env.NEXT_PUBLIC_ALLOWED_DOMAINS || "ua.edu.ph";
+const STUDENT_ID_PLACEHOLDER = process.env.NEXT_PUBLIC_STUDENT_ID_PLACEHOLDER || "2023001839";
 
 function StudentPortalContent() {
   const [view, setView] = useState<
@@ -65,6 +67,10 @@ function StudentPortalContent() {
 
   const [philippineTime, setPhilippineTime] = useState("");
   const [registeredId, setRegisteredId] = useState<string | null>(null);
+
+  const formattedDomains = useMemo(() => {
+    return ALLOWED_DOMAINS.split(',').map(d => `@${d.trim()}`).join(' or ');
+  }, []);
 
   const fetchHistory = useCallback(async (idToFetch: string) => {
     if (!idToFetch) return;
@@ -246,7 +252,6 @@ function StudentPortalContent() {
       if (data.isRegistered && data.studentId) {
         const privateKey = await get("student_private_key");
 
-        // If keys are missing, switch to verification screen without altering local storage
         if (!privateKey) {
           setStudentId(data.studentId);
           setGoogleEmail(data.email || "");
@@ -260,7 +265,6 @@ function StudentPortalContent() {
           return;
         }
 
-        // If private key matches this terminal, sign in normally using the current token
         await set("student_id", data.studentId);
         await set("session_token", data.sessionToken);
         if (data.publicKey) {
@@ -358,7 +362,6 @@ function StudentPortalContent() {
     }
   }
 
-  // Step 1 Recovery: Verifies credentials and drops active session on target device
   async function handleRecoveryStep1Verify(e: React.FormEvent) {
     e.preventDefault();
 
@@ -423,7 +426,6 @@ function StudentPortalContent() {
     }
   }
 
-  // Step 2 Recovery: Submits new PIN configuration to system
   async function handleRecoveryStep2CommitPin(e: React.FormEvent) {
     e.preventDefault();
 
@@ -697,7 +699,7 @@ function StudentPortalContent() {
                 />
 
                 <p className="text-xs text-center text-slate-500 font-medium">
-                  Access is strictly restricted to valid @ua.edu.ph institutional addresses.
+                  Access is strictly restricted to valid {formattedDomains} institutional addresses.
                 </p>
               </div>
 
@@ -750,7 +752,7 @@ function StudentPortalContent() {
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. 2023001839"
+                    placeholder={`e.g. ${STUDENT_ID_PLACEHOLDER}`}
                     className="w-full px-4 lg:px-5 py-3.5 lg:py-4 rounded-xl bg-slate-50 border border-slate-200 outline-none text-sm sm:text-base font-medium focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all shadow-sm"
                     value={studentId}
                     onChange={(e) => setStudentId(e.target.value)}
@@ -849,7 +851,7 @@ function StudentPortalContent() {
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. 2023001839"
+                    placeholder={`e.g. ${STUDENT_ID_PLACEHOLDER}`}
                     className="w-full px-4 lg:px-5 py-3.5 lg:py-4 rounded-xl bg-slate-50 border border-slate-200 outline-none text-sm sm:text-base font-medium focus:bg-white focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/20 transition-all shadow-sm"
                     value={studentId}
                     onChange={(e) => setStudentId(e.target.value)}
