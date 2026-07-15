@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
 import { getCurrentPHTimeInMinutes, parseScheduleTime } from "./utils";
 import { checkRateLimit } from "@/lib/ratelimit";
+import { pusherServer } from "@/lib/pusherServer";
 
 export async function getServerTime() {
   return { success: true, timestamp: new Date().toISOString() };
@@ -387,7 +388,7 @@ export async function submitAttendance(data: {
       };
     }
 
-    await prisma.attendanceLog.create({
+    const newLog = await prisma.attendanceLog.create({
       data: {
         student_id: data.studentId,
         schedule_id: matchedSchedule.id,
@@ -396,9 +397,30 @@ export async function submitAttendance(data: {
       },
     });
 
+    try {
+      const studentDisplayName = `${student.first_name || ""} ${student.last_name || ""}`.trim() || data.studentId;
+
+      await pusherServer.trigger("attendance-channel", "new-attendance", {
+        id: newLog.id,
+        studentName: studentDisplayName,
+        studentFirstName: student.first_name,
+        studentLastName: student.last_name,
+        studentId: data.studentId,
+        status: attendanceStatus,
+        roomName: data.labRoom,
+        courseCode: matchedSchedule.course_code,
+        section: matchedSchedule.section,
+        createdAt: newLog.timestamp.toISOString(),
+        signature: data.signature,
+        scheduleId: matchedSchedule.id,
+      });
+    } catch (pusherError) {
+      console.error("[REALTIME_BROADCAST_ERROR] Failed to push live attendance log:", pusherError);
+    }
+
     return {
       success: true,
-      message: `Attendance securely recorded. Status: ${attendanceStatus}`,
+      message: `Attendance securely recorded for ${data.labRoom}!`,
     };
   } catch (error) {
     console.error("Attendance Server Exception:", error);

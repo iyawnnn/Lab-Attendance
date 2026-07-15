@@ -7,6 +7,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { AttendanceLog, Schedule } from "../types";
 import { usePusherEvent } from "@/hooks/usePusher";
+import ActionModal from "@/app/components/ActionModal";
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -132,6 +133,14 @@ function FilterDropdown({
 export default function AttendanceTab({ logs: initialLogs, schedules }: { logs: AttendanceLog[], schedules: Schedule[] }) {
   const router = useRouter();
   const [logs, setLogs] = useState<AttendanceLog[]>(initialLogs);
+  const [modalConfig, setModalConfig] = useState({
+    isOpen: false,
+    type: "alert" as "alert" | "confirm" | "success" | "error",
+    title: "",
+    message: "",
+    confirmText: "Confirm",
+    onConfirm: () => {},
+  });
   
   const [searchQuery, setSearchQuery] = useState("");
   const [dateFilter, setDateFilter] = useState("");
@@ -283,7 +292,14 @@ export default function AttendanceTab({ logs: initialLogs, schedules }: { logs: 
   async function downloadPDF() {
     setIsExportMenuOpen(false);
     if (filteredLogs.length === 0) {
-      alert("No data available to export to PDF.");
+      setModalConfig({
+        isOpen: true,
+        type: "alert",
+        title: "No Data Available",
+        message: "No data available to export to PDF.",
+        confirmText: "Okay",
+        onConfirm: () => {},
+      });
       return;
     }
 
@@ -592,6 +608,15 @@ export default function AttendanceTab({ logs: initialLogs, schedules }: { logs: 
           </div>
         )}
       </div>
+      <ActionModal 
+        isOpen={modalConfig.isOpen}
+        type={modalConfig.type}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        onClose={() => setModalConfig(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={modalConfig.onConfirm}
+        confirmText={modalConfig.confirmText}
+      />
     </div>
   );
 }
