@@ -139,6 +139,7 @@ function StudentPortalContent() {
             await del("session_token");
             if (typeof window !== "undefined") {
               sessionStorage.removeItem("google_id_token");
+              sessionStorage.removeItem("google_email");
             }
             setView("login");
             setIsError(true);
@@ -193,6 +194,7 @@ function StudentPortalContent() {
             await del("session_token");
             if (typeof window !== "undefined") {
               sessionStorage.removeItem("google_id_token");
+              sessionStorage.removeItem("google_email");
             }
 
             setRegisteredId(null);
@@ -304,6 +306,9 @@ function StudentPortalContent() {
 
       if (!data.isRegistered && data.email) {
         setGoogleEmail(data.email);
+        if (typeof window !== "undefined") {
+          sessionStorage.setItem("google_email", data.email);
+        }
         setFirstName(data.firstName || "");
         setLastName(data.lastName || "");
         setView("onboarding");
@@ -338,9 +343,16 @@ function StudentPortalContent() {
           : "") ||
         "";
 
-      if (!tokenToUse) {
+      const emailToUse =
+        googleEmail ||
+        (typeof window !== "undefined"
+          ? sessionStorage.getItem("google_email")
+          : "") ||
+        "";
+
+      if (!tokenToUse || !emailToUse) {
         setIsError(true);
-        setMessage("Google token context expired. Please sign in again.");
+        setMessage("Google authentication context expired. Please sign in again.");
         setIsSubmitting(false);
         return;
       }
@@ -368,6 +380,7 @@ function StudentPortalContent() {
           lastName,
           publicKey: publicKeyBase64,
           recoveryPin,
+          email: emailToUse,
         }),
       });
 
@@ -596,6 +609,7 @@ function StudentPortalContent() {
           await del("session_token");
           if (typeof window !== "undefined") {
             sessionStorage.removeItem("google_id_token");
+            sessionStorage.removeItem("google_email");
           }
           setView("login");
           setIsError(false);
@@ -618,6 +632,7 @@ function StudentPortalContent() {
     await del("session_token");
     if (typeof window !== "undefined") {
       sessionStorage.removeItem("google_id_token");
+      sessionStorage.removeItem("google_email");
     }
 
     setRegisteredId(null);
