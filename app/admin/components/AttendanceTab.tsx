@@ -6,7 +6,7 @@ import { Search, ChevronDown, Check, X, FileText, Download } from "lucide-react"
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { AttendanceLog, Schedule } from "../types";
-import { usePusherEvent } from "@/hooks/usePusher"; // Integrated clean real-time hook[cite: 1]
+import { usePusherEvent } from "@/hooks/usePusher";
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -131,7 +131,7 @@ function FilterDropdown({
 
 export default function AttendanceTab({ logs: initialLogs, schedules }: { logs: AttendanceLog[], schedules: Schedule[] }) {
   const router = useRouter();
-  const [logs, setLogs] = useState<AttendanceLog[]>(initialLogs); // Maintain stateful copy for live prepend[cite: 1]
+  const [logs, setLogs] = useState<AttendanceLog[]>(initialLogs);
   
   const [searchQuery, setSearchQuery] = useState("");
   const [dateFilter, setDateFilter] = useState("");
@@ -146,12 +146,10 @@ export default function AttendanceTab({ logs: initialLogs, schedules }: { logs: 
 
   const itemsPerPage = 10;
 
-  // Keep state synchronized with server action data transitions or router navigations
   useEffect(() => {
     setLogs(initialLogs);
   }, [initialLogs]);
 
-  // Real-time background sync safety relaxed to 30s as Websockets are now instantaneous[cite: 1]
   useEffect(() => {
     const interval = setInterval(() => {
       if (document.visibilityState === "visible") {
@@ -162,18 +160,15 @@ export default function AttendanceTab({ logs: initialLogs, schedules }: { logs: 
     return () => clearInterval(interval);
   }, [router]);
 
-  // Listen to live student check-ins and update the state in real time[cite: 1]
   usePusherEvent<any>("attendance-channel", "new-attendance", (newLog) => {
     setLogs((prev) => {
-      // Prevent duplicate rendering issues if router.refresh() occurs concurrently
       if (prev.some((log) => log.id === newLog.id)) {
         return prev;
       }
 
-      // Convert the incoming single student name payload back into first/last name
-      const nameParts = newLog.studentName ? newLog.studentName.split(" ") : ["", ""];
-      const first_name = nameParts[0] || "";
-      const last_name = nameParts.slice(1).join(" ") || "";
+      // Safe multi-property extraction with robust split fallbacks
+      const firstName = newLog.studentFirstName || (newLog.studentName ? newLog.studentName.split(" ")[0] : "");
+      const lastName = newLog.studentLastName || (newLog.studentName ? newLog.studentName.split(" ").slice(1).join(" ") : "");
 
       const formattedLog: AttendanceLog = {
         id: newLog.id,
@@ -182,8 +177,8 @@ export default function AttendanceTab({ logs: initialLogs, schedules }: { logs: 
         signature: newLog.signature || "",
         student: {
           student_id: newLog.studentId,
-          first_name: first_name,
-          last_name: last_name,
+          first_name: firstName.trim().toUpperCase(),
+          last_name: lastName.trim().toUpperCase(),
         } as any,
         schedule: {
           course_code: newLog.courseCode,
@@ -235,9 +230,9 @@ export default function AttendanceTab({ logs: initialLogs, schedules }: { logs: 
       const logDateObj = new Date(log.timestamp);
       const logDateString = logDateObj.toLocaleDateString('en-CA'); 
 
+      const studentName = `${log.student.first_name || ""} ${log.student.last_name || ""}`.toLowerCase();
       const matchesSearch = log.student.student_id.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                            log.student.first_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            log.student.last_name.toLowerCase().includes(searchQuery.toLowerCase());
+                            studentName.includes(searchQuery.toLowerCase());
       
       const matchesDate = dateFilter === "" || logDateString === dateFilter;
       const matchesCourse = courseFilter === "" || log.schedule.course_code === courseFilter;
@@ -257,7 +252,7 @@ export default function AttendanceTab({ logs: initialLogs, schedules }: { logs: 
 
   function downloadCSV() {
     setIsExportMenuOpen(false);
-    const headers = ["Date", "Time", "Status", "Student ID", "First Name", "Last Name", "Course", "Section", "Lab Room", "Entry Method"];
+    const headers = ["Date", "Time", "Status", "Student ID", "Last Name", "First Name", "Course", "Section", "Lab Room", "Entry Method"];
     const rows = filteredLogs.map(log => {
       const dateObj = new Date(log.timestamp);
       const isManual = log.signature && log.signature.includes("OVERRIDE");
@@ -266,8 +261,8 @@ export default function AttendanceTab({ logs: initialLogs, schedules }: { logs: 
         dateObj.toLocaleTimeString(),
         log.status,
         log.student.student_id,
-        log.student.first_name,
-        log.student.last_name,
+        (log.student.last_name || "").trim().toUpperCase(),
+        (log.student.first_name || "").trim().toUpperCase(),
         log.schedule.course_code,
         log.schedule.section,
         log.schedule.lab_room,
@@ -348,6 +343,8 @@ export default function AttendanceTab({ logs: initialLogs, schedules }: { logs: 
 
     const tableRows = filteredLogs.map((log) => {
       const isManual = log.signature && log.signature.includes("OVERRIDE");
+      const sLastName = (log.student.last_name || "").trim().toUpperCase();
+      const sFirstName = (log.student.first_name || "").trim().toUpperCase();
       return [
         new Date(log.timestamp).toLocaleString([], {
           month: "short",
@@ -357,7 +354,7 @@ export default function AttendanceTab({ logs: initialLogs, schedules }: { logs: 
         }),
         log.status === "ON_TIME" ? "ON TIME" : "LATE",
         log.student.student_id,
-        `${log.student.last_name}, ${log.student.first_name}`,
+        `${sLastName}, ${sFirstName}`,
         `${log.schedule.course_code} (${log.schedule.section})`,
         log.schedule.lab_room,
         isManual ? "Manual" : "Device"
@@ -526,6 +523,8 @@ export default function AttendanceTab({ logs: initialLogs, schedules }: { logs: 
             <tbody className="divide-y divide-slate-100 text-slate-700 text-sm">
               {paginatedLogs.map((log) => {
                 const isManual = log.signature && log.signature.includes("OVERRIDE");
+                const sLastName = (log.student.last_name || "").trim().toUpperCase();
+                const sFirstName = (log.student.first_name || "").trim().toUpperCase();
                 
                 return (
                   <tr key={log.id} className="hover:bg-slate-50 transition-colors">
@@ -543,7 +542,9 @@ export default function AttendanceTab({ logs: initialLogs, schedules }: { logs: 
                       </div>
                     </td>
                     <td className="p-4">
-                      <div className="font-bold text-slate-900">{log.student.first_name} {log.student.last_name}</div>
+                      <div className="font-bold text-slate-900">
+                        {sLastName}, {sFirstName}
+                      </div>
                       <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">{log.student.student_id}</div>
                     </td>
                     <td className="p-4">

@@ -104,11 +104,15 @@ export async function updateSchedule(
 
 export async function deleteSchedule(id: number) {
   try {
-    await prisma.schedule.delete({ where: { id: id } });
+    // 1. Safely wipe associated logs first, then delete the schedule
+    await prisma.$transaction([
+      prisma.attendanceLog.deleteMany({ where: { schedule_id: id } }),
+      prisma.schedule.delete({ where: { id: id } })
+    ]);
     
     await logAdminAction(
       "DELETE_SCHEDULE",
-      `Deleted class schedule entry ID ${id}.`,
+      `Deleted class schedule entry ID ${id} and associated attendance logs.`,
       String(id)
     );
 
@@ -121,7 +125,7 @@ export async function deleteSchedule(id: number) {
       console.error("[REALTIME_BROADCAST_ERROR] Failed to dispatch schedule removal:", pusherError);
     }
 
-    return { success: true, message: "Class schedule deleted successfully." };
+    return { success: true, message: "Class schedule and records deleted successfully." };
   } catch (error) {
     return { success: false, message: "Failed to delete the schedule." };
   }

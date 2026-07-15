@@ -15,7 +15,7 @@ import {
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { manuallyAdmitStudent } from "@/app/actions/teacher";
-import { usePusherEvent } from "@/hooks/usePusher"; // Integrated clean real-time hook[cite: 1]
+import { usePusherEvent } from "@/hooks/usePusher";
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -146,7 +146,7 @@ interface AttendanceTabProps {
 
 export default function AttendanceTab({ logs: initialLogs = [], schedules = [], teacherUserId }: AttendanceTabProps) {
   const router = useRouter();
-  const [logs, setLogs] = useState<any[]>(initialLogs); // Stateful list updated in real-time[cite: 1]
+  const [logs, setLogs] = useState<any[]>(initialLogs);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [dayFilter, setDayFilter] = useState("");
@@ -165,12 +165,17 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
 
   const logsPerPage = 10;
 
-  // Sync state cleanly if initial prop data changes (e.g. native router navigation revalidations)
+  const currentDayOfWeek = useMemo(() => {
+    return new Date().toLocaleDateString("en-US", {
+      weekday: "long",
+      timeZone: "Asia/Manila"
+    });
+  }, []);
+
   useEffect(() => {
     setLogs(initialLogs);
   }, [initialLogs]);
 
-  // Real-time safety sync relaxed to 30s since active WebSockets listen live[cite: 1]
   useEffect(() => {
     const interval = setInterval(() => {
       if (document.visibilityState === "visible") {
@@ -181,17 +186,15 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
     return () => clearInterval(interval);
   }, [router]);
 
-  // Handle incoming Pusher broadcasts state-side[cite: 1]
   usePusherEvent<any>("attendance-channel", "new-attendance", (newLog) => {
     setLogs((prev) => {
-      // Prevent duplicate log rendering if pusher triggers alongside page refreshing
-      if (prev.some((log) => log.id === newLog.id)) {
+      // Robust type-safe duplication validation check across stringified IDs
+      if (prev.some((log) => String(log.id) === String(newLog.id))) {
         return prev;
       }
 
-      const nameParts = newLog.studentName ? newLog.studentName.split(" ") : ["", ""];
-      const first_name = nameParts[0] || "";
-      const last_name = nameParts.slice(1).join(" ") || "";
+      const firstName = newLog.studentFirstName || (newLog.studentName ? newLog.studentName.split(" ")[0] : "");
+      const lastName = newLog.studentLastName || (newLog.studentName ? newLog.studentName.split(" ").slice(1).join(" ") : "");
 
       const formattedLog = {
         id: newLog.id,
@@ -200,8 +203,8 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
         signature: newLog.signature || "",
         student: {
           student_id: newLog.studentId,
-          first_name,
-          last_name,
+          first_name: firstName.trim().toUpperCase(),
+          last_name: lastName.trim().toUpperCase(),
         },
         schedule: {
           id: newLog.scheduleId,
@@ -239,7 +242,6 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
     { id: "LATE", label: "Late" }
   ];
 
-  // Dynamic Class filtering option based on chosen day criteria
   const scheduleOptions = useMemo(() => {
     let actionableSchedules = schedules;
 
@@ -247,7 +249,6 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
       actionableSchedules = schedules.filter(sched => {
         if (!sched.date) return false;
         
-        // Match weekday name criteria or calculate day string values from hard-coded dates
         if (sched.date.toLowerCase() === dayFilter.toLowerCase()) return true;
         
         if (!isNaN(Date.parse(sched.date))) {
@@ -267,12 +268,45 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
     }));
   }, [schedules, dayFilter]);
 
-  // Handle active choice eviction if filtered schedule set alters completely
+  const manualScheduleOptions = useMemo(() => {
+    const todaysSchedules = schedules.filter(sched => {
+      if (!sched.date) return false;
+      if (sched.date.toLowerCase() === currentDayOfWeek.toLowerCase()) return true;
+      
+      if (!isNaN(Date.parse(sched.date))) {
+        const extractedDay = new Date(sched.date).toLocaleDateString("en-US", {
+          weekday: "long",
+          timeZone: "Asia/Manila"
+        });
+        return extractedDay.toLowerCase() === currentDayOfWeek.toLowerCase();
+      }
+      return false;
+    });
+
+    return todaysSchedules.map(sched => ({
+      id: sched.id.toString(),
+      label: `${sched.course_code} - Sec ${sched.section} (${sched.lab_room})`
+    }));
+  }, [schedules, currentDayOfWeek]);
+
   useEffect(() => {
     if (classFilter && !scheduleOptions.some(opt => opt.id === classFilter)) {
       setClassFilter("");
     }
   }, [dayFilter, scheduleOptions, classFilter]);
+
+  useEffect(() => {
+    if (manualScheduleId && !manualScheduleOptions.some(opt => opt.id === manualScheduleId)) {
+      setManualScheduleId("");
+    }
+  }, [manualScheduleOptions, manualScheduleId]);
+
+  useEffect(() => {
+    if (!showManualEntry) {
+      setManualScheduleId("");
+      setManualStudentId("");
+    }
+  }, [showManualEntry]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -281,7 +315,7 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
   const filteredLogs = useMemo(() => {
     return logs.filter((log) => {
       const studentName =
-        `${log.student.first_name} ${log.student.last_name}`.toLowerCase();
+        `${log.student.first_name || ""} ${log.student.last_name || ""}`.toLowerCase();
       const studentId = log.student.student_id.toLowerCase();
       const courseCode = log.schedule?.course_code?.toLowerCase() || "";
 
@@ -334,13 +368,15 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
       scheduleId: parseInt(manualScheduleId),
       teacherUserId,
       status: manualStatus,
-    });
+    }) as any;
 
     if (response.success) {
       alert(response.message);
+      
+      // Let your Pusher websocket listener prepend the new log automatically to avoid double state insertions
       setManualStudentId("");
+      setManualScheduleId("");
       setShowManualEntry(false);
-      router.refresh();
     } else {
       alert(`Error: ${response.message}`);
     }
@@ -380,8 +416,8 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
         new Date(log.timestamp).toLocaleDateString(),
         new Date(log.timestamp).toLocaleTimeString(),
         log.student.student_id,
-        log.student.last_name,
-        log.student.first_name,
+        (log.student.last_name || "").trim().toUpperCase(),
+        (log.student.first_name || "").trim().toUpperCase(),
         log.schedule?.course_code || "N/A",
         log.schedule?.section || "N/A",
         log.schedule?.lab_room || "N/A",
@@ -482,9 +518,11 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
 
     const tableRows = filteredLogs.map((log) => {
       const isManual = log.signature && log.signature.includes("OVERRIDE");
+      const sLastName = (log.student.last_name || "").trim().toUpperCase();
+      const sFirstName = (log.student.first_name || "").trim().toUpperCase();
       return [
         log.student.student_id,
-        `${log.student.last_name}, ${log.student.first_name}`,
+        `${sLastName}, ${sFirstName}`,
         `${log.schedule?.course_code || "N/A"} (${log.schedule?.section || "N/A"})`,
         log.schedule?.lab_room || "N/A",
         log.status === "ON_TIME" ? "ON TIME" : "LATE",
@@ -539,16 +577,16 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
     <div className="space-y-6 animate-in fade-in duration-300">
       <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-4 relative z-10">
         <div className="flex flex-col lg:flex-row gap-2.5 items-center justify-between w-full">
-          <div className="flex flex-wrap lg:flex-nowrap gap-2 w-full lg:flex-1 items-center min-w-0">
+          <div className="flex flex-wrap md:flex-nowrap gap-2 w-full lg:flex-1 items-center min-w-0">
             <input
               type="text"
               placeholder="Search student or course..."
-              className="w-full sm:w-[180px] lg:w-[220px] shrink-0 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium outline-none focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/10 transition-all shadow-sm h-[38px]"
+              className="w-full md:flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium outline-none focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/10 transition-all shadow-sm h-[38px]"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
 
-            <div className="w-full sm:w-[125px] shrink-0">
+            <div className="w-full md:w-[150px]">
               <FilterDropdown
                 options={dayOptions}
                 value={dayFilter}
@@ -560,7 +598,7 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
               />
             </div>
 
-            <div className="w-full sm:w-[180px] lg:w-[210px] shrink-0">
+            <div className="w-full md:flex-1">
               <FilterDropdown
                 options={scheduleOptions}
                 value={classFilter}
@@ -573,7 +611,7 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
 
             <input
               type="date"
-              className="w-full sm:w-[130px] shrink-0 px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium outline-none focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/10 transition-all text-slate-600 cursor-pointer shadow-sm h-[38px]"
+              className="w-full md:w-[160px] px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium outline-none focus:border-[#011B51] focus:ring-2 focus:ring-[#011B51]/10 transition-all text-slate-600 cursor-pointer shadow-sm h-[38px]"
               value={dateFilter}
               onChange={(e) => setDateFilter(e.target.value)}
             />
@@ -626,7 +664,7 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
 
         {showManualEntry && (
           <form onSubmit={handleManualSubmit} className="mt-2 p-5 bg-blue-50/50 border border-blue-100 rounded-xl flex flex-col md:flex-row gap-4 items-end animate-in slide-in-from-top-2">
-            <div className="w-full md:w-[25%]">
+            <div className="w-full md:w-[35%]">
               <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 ml-1">
                 Student ID
               </label>
@@ -640,21 +678,21 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
               />
             </div>
             
-            <div className="w-full md:w-[40%]">
+            <div className="w-full md:w-[45%]">
               <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 ml-1">
-                Class Session
+                Class Session (Today: <span className="text-[#011B51]">{currentDayOfWeek}</span>)
               </label>
               <FilterDropdown
-                options={scheduleOptions}
+                options={manualScheduleOptions}
                 value={manualScheduleId}
                 onChange={setManualScheduleId}
-                placeholder="Search and choose a class..."
+                placeholder="Choose one of today's classes..."
               />
             </div>
 
-            <div className="w-full md:w-[15%]">
+            <div className="w-full md:w-[20%]">
               <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 ml-1">
-                Attendance Status
+                Status
               </label>
               <FilterDropdown
                 options={statusOptions}
@@ -702,6 +740,8 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
               ) : (
                 paginatedLogs.map((log: any) => {
                   const isManual = log.signature && log.signature.includes("OVERRIDE");
+                  const sLastName = (log.student.last_name || "").trim().toUpperCase();
+                  const sFirstName = (log.student.first_name || "").trim().toUpperCase();
                   
                   return (
                     <tr
@@ -710,7 +750,7 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
                     >
                       <td className="px-6 py-4">
                         <span className="block font-bold text-slate-900">
-                          {log.student.last_name}, {log.student.first_name}
+                          {sLastName}, {sFirstName}
                         </span>
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
                           {log.student.student_id}

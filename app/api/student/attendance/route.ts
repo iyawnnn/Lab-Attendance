@@ -1,10 +1,9 @@
-// app/api/student/attendance/route.ts
-
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { db } from "@/lib/db";
 import { checkRateLimit } from "@/lib/ratelimit";
-import { pusherServer } from "@/lib/pusherServer"; // Integrated Pusher server instance
+import { pusherServer } from "@/lib/pusherServer";
+import { getCurrentPHTimeInMinutes, parseScheduleTime } from "@/app/actions/utils";
 
 function verifyEcdsaSignature(
   message: string,
@@ -127,18 +126,22 @@ export async function POST(req: Request) {
       );
     }
 
+    // Evaluate the submission time against schedule limits to determine late status
+    const currentMinutes = getCurrentPHTimeInMinutes();
+    const startMinutes = parseScheduleTime(matchedSchedule.schedule);
+    const lateThreshold = parseInt(process.env.LATE_THRESHOLD_MINUTES || "15", 10);
+    const attendanceStatus = currentMinutes > (startMinutes + lateThreshold) ? "LATE" : "ON_TIME";
+
     const newLog = await db.attendanceLog.create({
       data: {
         student_id: studentId,
         schedule_id: matchedSchedule.id,
-        status: "ON_TIME",
+        status: attendanceStatus,
         signature,
       },
     });
 
-    // Safely trigger real-time updates for dashboards
     try {
-      // Resolve student fallback display name dynamically[cite: 1]
       const studentDisplayName = 
         (student as any).name || 
         `${(student as any).first_name || ""} ${(student as any).last_name || ""}`.trim() || 
@@ -147,15 +150,16 @@ export async function POST(req: Request) {
       await pusherServer.trigger("attendance-channel", "new-attendance", {
         id: newLog.id,
         studentName: studentDisplayName,
+        studentFirstName: student.first_name,
+        studentLastName: student.last_name,
         studentId: studentId,
-        status: "ON_TIME",
+        status: attendanceStatus,
         roomName: labRoom,
         courseCode: matchedSchedule.course_code,
         section: matchedSchedule.section,
         createdAt: newLog.timestamp,
       });
     } catch (pusherError) {
-      // Log error internally; do not block response payload from serving success to student[cite: 1]
       console.error("[REALTIME_BROADCAST_ERROR] Failed to push live attendance log:", pusherError);
     }
 
