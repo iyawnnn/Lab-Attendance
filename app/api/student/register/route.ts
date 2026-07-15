@@ -13,7 +13,7 @@ export async function POST(request: Request) {
       lastName, 
       publicKey, 
       recoveryPin, 
-      email // ◄ Dynamic email capture added here
+      email 
     } = body;
 
     if (!studentId || !recoveryPin || !publicKey || !email) {
@@ -42,11 +42,21 @@ export async function POST(request: Request) {
       if (!existingStudent.public_key || existingStudent.public_key === "") {
         console.log(`[REGISTER_STUDENT] Student "${cleanStudentId}" re-onboarding via device recovery.`);
         
+        // 🔴 FIX: Verify the entered PIN matches the original recovery PIN in the database before binding
+        const dbHashPin = existingStudent.recovery_pin ? existingStudent.recovery_pin.trim() : "";
+        
+        if (dbHashPin && dbHashPin !== hashedPin) {
+          return NextResponse.json(
+            { success: false, message: "Incorrect Recovery PIN. Please try again." },
+            { status: 401 }
+          );
+        }
+
+        // Pin is verified, bind the new public key and assign a clean session token[cite: 1]
         await prisma.student.update({
           where: { student_id: cleanStudentId },
           data: {
             public_key: publicKey,
-            recovery_pin: hashedPin,
             session_token: newSessionToken, // Establishes pristine session state[cite: 1]
           },
         });
@@ -74,7 +84,7 @@ export async function POST(request: Request) {
     await prisma.student.create({
       data: {
         student_id: cleanStudentId, // Preserves prepended zeros safely[cite: 1]
-        email: String(email).trim().toLowerCase(), // ◄ FIX: Now completely dynamic and unique
+        email: String(email).trim().toLowerCase(), 
         first_name: firstName,
         last_name: lastName,
         public_key: publicKey,

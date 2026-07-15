@@ -28,7 +28,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Verify current PIN hash signature safely
+    // Verify 6-digit PIN hash signature safely
     const normalizedInput = String(recoveryPin).trim().padStart(6, "0");
     const hashedInputPin = createHash("sha256").update(normalizedInput).digest("hex");
     const dbHashPin = student.recovery_pin.trim();
@@ -40,7 +40,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Generate fresh session token to instantly drop the other terminal session binding[cite: 1]
+    // Generate fresh session token to instantly drop the other terminal session binding
     const newSessionToken = randomUUID();
 
     await prisma.student.update({
@@ -51,12 +51,12 @@ export async function POST(request: Request) {
       },
     });
 
-    console.log(`[EVADE_SUCCESS] Session token shifted for ID: ${cleanStudentId}. Previous terminal evicted.[cite: 1]`);
+    console.log(`[EVADE_SUCCESS] Session token shifted for ID: ${cleanStudentId}. Previous terminal evicted.`);
 
     return NextResponse.json(
       {
         success: true,
-        message: "Identity verified. Previous device session evicted. Proceeding to PIN setup.[cite: 1]",
+        message: "Identity verified. Previous device session evicted. Proceeding to PIN setup.",
         sessionToken: newSessionToken,
         email: student.email,
         firstName: student.first_name,

@@ -20,6 +20,9 @@ export interface Schedule {
 
   active_pin?: string | null;
   pin_expires_at?: Date | string | null;
+
+  term_id: number;
+  is_archived: boolean;
 }
 
 export interface AttendanceLog {

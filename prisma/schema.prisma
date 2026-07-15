@@ -13,6 +13,16 @@ enum Role {
   TEACHER
 }
 
+model AcademicTerm {
+  id          Int        @id @default(autoincrement())
+  semester    String     // e.g., "First Semester", "Second Semester", "Summer"
+  school_year String     // e.g., "2026-2027"
+  is_active   Boolean    @default(true) // Only one term should be active at a time
+  createdAt   DateTime   @default(now())
+
+  schedules   Schedule[]
+}
+
 model User {
   id       Int    @id @default(autoincrement())
   user_id  String @unique 
@@ -37,6 +47,9 @@ model Schedule {
   teacher_id     Int?
   teacher        User?     @relation(fields: [teacher_id], references: [id])
   attendances    AttendanceLog[]
+  term_id        Int
+  academic_term  AcademicTerm @relation(fields: [term_id], references: [id])
+  is_archived    Boolean      @default(false)
 }
 
 model Student {
