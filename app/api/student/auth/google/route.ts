@@ -53,10 +53,14 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!email.endsWith("@ua.edu.ph")) {
+    const allowedDomainsString = process.env.ALLOWED_EMAIL_DOMAINS || "ua.edu.ph";
+    const allowedDomains = allowedDomainsString.split(",").map(domain => domain.trim());
+    const isDomainAuthorized = allowedDomains.some(domain => email.endsWith(`@${domain}`));
+
+    if (!isDomainAuthorized) {
       console.warn(`[AUTH_GOOGLE] Access denied for non-institutional domain email: ${email}`);
       return NextResponse.json(
-        { error: "Access restricted strictly to @ua.edu.ph institutional accounts." },
+        { error: `Access restricted strictly to authorized institutional accounts (${allowedDomainsString}).` },
         { status: 403 }
       );
     }
