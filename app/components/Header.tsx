@@ -7,9 +7,10 @@ import { Menu, X, ArrowRight } from "lucide-react";
 
 interface HeaderProps {
   onNavigateSection?: (sectionId: string) => void;
+  forceSolid?: boolean;
 }
 
-export default function Header({ onNavigateSection }: HeaderProps) {
+export default function Header({ onNavigateSection, forceSolid = false }: HeaderProps) {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -26,11 +27,13 @@ export default function Header({ onNavigateSection }: HeaderProps) {
     setIsMobileMenuOpen(false);
     if (onNavigateSection) {
       onNavigateSection(sectionId);
+    } else if (typeof window !== "undefined") {
+      window.location.href = `/#${sectionId}`;
     }
   };
 
-  /* Navigation bar turns solid white if scrolled down OR if mobile drawer is open */
-  const isSolidHeader = isScrolled || isMobileMenuOpen;
+  /* Navigation bar turns solid white if scrolled down, mobile drawer is open, or explicitly forced */
+  const isSolidHeader = isScrolled || isMobileMenuOpen || forceSolid;
 
   return (
     <header
@@ -57,18 +60,18 @@ export default function Header({ onNavigateSection }: HeaderProps) {
           </div>
           <div className="leading-tight text-left">
             <span
-              className={`text-sm sm:text-base font-extrabold tracking-tight block transition-colors ${
+              className={`text-base sm:text-lg font-black tracking-tight block transition-colors ${
                 isSolidHeader ? "text-[#011B51]" : "text-white"
               }`}
             >
-              University of Assumption
+              UA LabSign
             </span>
             <span
-              className={`text-[8px] sm:text-[9px] font-bold uppercase tracking-widest block -mt-0.5 transition-colors ${
+              className={`text-[8px] sm:text-[9.5px] font-extrabold uppercase tracking-wider block -mt-0.5 transition-colors ${
                 isSolidHeader ? "text-[#A51A21]" : "text-[#FED702]"
               }`}
             >
-              Laboratory Attendance System
+              UNIVERSITY OF ASSUMPTION
             </span>
           </div>
         </Link>
