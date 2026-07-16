@@ -2,6 +2,7 @@
 
 import React from "react";
 import { CheckCircle2, ShieldCheck } from "lucide-react";
+import { FaAndroid } from "react-icons/fa6";
 
 interface MobileShowcaseSectionProps {
   screenshotPath?: string;
@@ -58,8 +59,9 @@ export default function MobileShowcaseSection({
                   />
                 </a>
 
-                <span className="text-[10px] sm:text-[11px] font-extrabold text-white uppercase tracking-wider bg-white/10 px-3.5 sm:px-4 py-3 sm:py-3.5 rounded-xl border border-white/15 backdrop-blur-md">
-                  Official Android App
+                <span className="inline-flex items-center gap-2 text-[10px] sm:text-[11px] font-extrabold text-white uppercase tracking-wider bg-white/10 px-3.5 sm:px-4 py-3 sm:py-3.5 rounded-xl border border-white/15 backdrop-blur-md">
+                  <FaAndroid className="w-4 h-4 text-[#FED702]" />
+                  <span>Official Android App</span>
                 </span>
               </div>
             </div>
@@ -124,7 +126,7 @@ export default function MobileShowcaseSection({
                   </div>
                 </div>
 
-                {/* Floating Status Badge 1 (Top Right Offset Clearance) */}
+                {/* Floating Status Badge 1 */}
                 <div className="absolute top-6 -right-3 xs:-right-5 sm:top-10 sm:-right-8 lg:-right-20 xl:-right-24 bg-white text-[#011B51] p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl shadow-2xl border border-gray-100 flex items-center space-x-2.5 sm:space-x-3 z-20 pointer-events-none max-w-[140px] xs:max-w-[160px] sm:max-w-none">
                   <div className="w-6 h-6 sm:w-8 sm:h-8 bg-emerald-50 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0">
                     <CheckCircle2 className="w-3.5 h-3.5 sm:w-4.5 sm:h-4.5 text-emerald-600 stroke-[2.5]" />
@@ -135,7 +137,7 @@ export default function MobileShowcaseSection({
                   </div>
                 </div>
 
-                {/* Floating Status Badge 2 (Bottom Left Offset Clearance) */}
+                {/* Floating Status Badge 2 */}
                 <div className="absolute bottom-6 -left-3 xs:-left-5 sm:bottom-10 sm:-left-8 lg:-left-20 xl:-left-24 bg-white text-[#011B51] p-2.5 sm:p-3.5 rounded-xl sm:rounded-2xl shadow-2xl border border-gray-100 flex items-center space-x-2.5 sm:space-x-3 z-20 pointer-events-none max-w-[140px] xs:max-w-[160px] sm:max-w-none">
                   <div className="w-6 h-6 sm:w-8 sm:h-8 bg-amber-50 rounded-xl flex items-center justify-center shrink-0">
                     <ShieldCheck className="w-3.5 h-3.5 sm:w-4.5 sm:h-4.5 text-[#A51A21] stroke-[2.5]" />

@@ -16,12 +16,14 @@ const baseUrl = process.env.NEXT_PUBLIC_APP_URL
 export const metadata: Metadata = {
   metadataBase: baseUrl,
   title: {
-    default: "University of Assumption Laboratory Attendance System",
-    template: "%s | University of Assumption Laboratory Attendance System",
+    default: "UA LabSign | Laboratory Attendance System",
+    template: "%s | UA LabSign",
   },
   description:
-    "Official University of Assumption computer laboratory attendance portal featuring ECDSA digital signatures, dynamic room PINs, and precise geofence boundary check-ins.",
+    "Official University of Assumption computer laboratory attendance portal featuring ECDSA P-256 digital signatures, dynamic room PINs, and precise geofence boundary check-ins.",
   keywords: [
+    "UA LabSign",
+    "UA LabSign System",
     "University of Assumption",
     "University of Assumption Laboratory System",
     "Laboratory Attendance System",
@@ -40,24 +42,24 @@ export const metadata: Metadata = {
     type: "website",
     locale: "en_PH",
     url: baseUrl.toString(),
-    title: "University of Assumption Laboratory Attendance System",
+    title: "UA LabSign | Laboratory Attendance System",
     description:
-      "Hardware-bound, cryptographic attendance tracking system for computer laboratories at University of Assumption.",
-    siteName: "University of Assumption Laboratory Attendance System",
+      "Hardware-bound, zero-trust cryptographic attendance tracking system for computer laboratories at University of Assumption.",
+    siteName: "UA LabSign",
     images: [
       {
         url: "/ua-logo.png",
         width: 512,
         height: 512,
-        alt: "University of Assumption Seal",
+        alt: "University of Assumption Official Seal - UA LabSign",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "University of Assumption Laboratory Attendance System",
+    title: "UA LabSign | Laboratory Attendance System",
     description:
-      "Hardware-bound, cryptographic attendance tracking system for computer laboratories at University of Assumption.",
+      "Hardware-bound, zero-trust cryptographic attendance tracking system for computer laboratories at University of Assumption.",
     images: ["/ua-logo.png"],
   },
 };

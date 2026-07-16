@@ -2,7 +2,8 @@
 
 import React from "react";
 import Link from "next/link";
-import { ArrowRight, Smartphone } from "lucide-react";
+import { ArrowRight } from "lucide-react";
+import { FaAndroid } from "react-icons/fa6";
 
 interface HeroSectionProps {
   onNavigateSection?: (sectionId: string) => void;
@@ -61,8 +62,8 @@ export default function HeroSection({ onNavigateSection }: HeroSectionProps) {
                 onClick={() => onNavigateSection && onNavigateSection("mobile")}
                 className="inline-flex items-center px-6 py-3.5 rounded-xl bg-black/30 backdrop-blur-md text-white border border-white/40 font-extrabold text-xs uppercase tracking-wider hover:bg-white/20 transition-all cursor-pointer"
               >
-                <Smartphone className="mr-2 w-4 h-4" />
-                Download Mobile App
+                <FaAndroid className="mr-2 w-4 h-4 text-[#FED702]" />
+                Download Android App
               </button>
             </div>
           </div>
