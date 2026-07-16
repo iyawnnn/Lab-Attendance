@@ -77,3 +77,9 @@ UA LabSign utilizes a defense-in-depth security model to guarantee data integrit
 * **Client Cryptography & Storage:** Web Crypto API (ECDSA P-256), `idb-keyval` (IndexedDB wrapper)
 * **Backend & Security:** Next.js Server Actions, Node.js `crypto` module, `bcrypt`
 * **Database & ORM:** Cloud-hosted serverless PostgreSQL (deployed via Neon), managed via Prisma ORM
+
+---
+
+Copyright (c) 2026 University of Assumption.
+
+All Rights Reserved. Unauthorized copying, modification, or distribution of this software is strictly prohibited.
