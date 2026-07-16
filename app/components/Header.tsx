@@ -48,7 +48,12 @@ export default function Header({ onNavigateSection, forceSolid = false }: Header
         aria-label="Main Navigation"
       >
         {/* Brand Logo and Name */}
-        <Link href="/" className="flex items-center space-x-2.5 sm:space-x-3.5 group shrink-0">
+        <Link href="/" className="flex items-center space-x-2.5 sm:space-x-3.5 group shrink-0"
+              onClick={(e) => {
+                e.preventDefault(); // Prevents the "#" from being added to your URL
+                window.scrollTo({ top: 0, behavior: 'smooth' }); // Scrolls smoothly to the very top
+        }}>
+
           <div className="w-9 h-9 sm:w-10 sm:h-10 relative overflow-hidden transition-transform group-hover:scale-105 rounded-full bg-white p-1 shadow-xs shrink-0">
             <img
               src="/ua-logo.png"
