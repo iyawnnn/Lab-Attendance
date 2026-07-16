@@ -16,6 +16,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { manuallyAdmitStudent } from "@/app/actions/teacher";
 import { usePusherEvent } from "@/hooks/usePusher";
+import ActionModal from "@/app/components/ActionModal";
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -147,6 +148,14 @@ interface AttendanceTabProps {
 export default function AttendanceTab({ logs: initialLogs = [], schedules = [], teacherUserId }: AttendanceTabProps) {
   const router = useRouter();
   const [logs, setLogs] = useState<any[]>(initialLogs);
+  const [modalConfig, setModalConfig] = useState({
+    isOpen: false,
+    type: "alert" as "alert" | "confirm" | "success" | "error",
+    title: "",
+    message: "",
+    confirmText: "Confirm",
+    onConfirm: () => {},
+  });
 
   const [searchTerm, setSearchTerm] = useState("");
   const [dayFilter, setDayFilter] = useState("");
@@ -187,6 +196,10 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
   }, [router]);
 
   usePusherEvent<any>("attendance-channel", "new-attendance", (newLog) => {
+    // Filter so the teacher only sees real-time updates for their own classes
+    const belongsToTeacher = schedules.some((s) => String(s.id) === String(newLog.scheduleId));
+    if (!belongsToTeacher) return;
+
     setLogs((prev) => {
       // Robust type-safe duplication validation check across stringified IDs
       if (prev.some((log) => String(log.id) === String(newLog.id))) {
@@ -355,33 +368,60 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
   async function handleManualSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!manualStudentId || !manualScheduleId) {
-      alert("Please enter a Student ID and select a class.");
+      setModalConfig({
+        isOpen: true,
+        type: "alert",
+        title: "Missing Information",
+        message: "Please enter a Student ID and select a class.",
+        confirmText: "Okay",
+        onConfirm: () => {},
+      });
       return;
     }
 
-    if (!confirm(`Authorize manual entry for Student ID: ${manualStudentId} as ${manualStatus.replace("_", " ")}?`)) return;
+    setModalConfig({
+      isOpen: true,
+      type: "confirm",
+      title: "Authorize Admission",
+      message: `Authorize manual entry for Student ID: ${manualStudentId} as ${manualStatus.replace("_", " ")}?`,
+      confirmText: "Admit Student",
+      onConfirm: async () => {
+        setModalConfig(prev => ({ ...prev, isOpen: false }));
+        setIsOverriding(true);
 
-    setIsOverriding(true);
+        const response = await manuallyAdmitStudent({
+          studentId: manualStudentId,
+          scheduleId: parseInt(manualScheduleId),
+          teacherUserId,
+          status: manualStatus,
+        }) as any;
 
-    const response = await manuallyAdmitStudent({
-      studentId: manualStudentId,
-      scheduleId: parseInt(manualScheduleId),
-      teacherUserId,
-      status: manualStatus,
-    }) as any;
+        if (response.success) {
+          setModalConfig({
+            isOpen: true,
+            type: "success",
+            title: "Success",
+            message: response.message,
+            confirmText: "Okay",
+            onConfirm: () => {},
+          });
+          setManualStudentId("");
+          setManualScheduleId("");
+          setShowManualEntry(false);
+        } else {
+          setModalConfig({
+            isOpen: true,
+            type: "error",
+            title: "Admission Failed",
+            message: `Error: ${response.message}`,
+            confirmText: "Okay",
+            onConfirm: () => {},
+          });
+        }
 
-    if (response.success) {
-      alert(response.message);
-      
-      // Let your Pusher websocket listener prepend the new log automatically to avoid double state insertions
-      setManualStudentId("");
-      setManualScheduleId("");
-      setShowManualEntry(false);
-    } else {
-      alert(`Error: ${response.message}`);
-    }
-
-    setIsOverriding(false);
+        setIsOverriding(false);
+      }
+    });
   }
 
   const totalPages = Math.max(1, Math.ceil(filteredLogs.length / logsPerPage));
@@ -393,7 +433,14 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
   const exportToCSV = () => {
     setIsExportMenuOpen(false);
     if (filteredLogs.length === 0) {
-      alert("No data available to export.");
+      setModalConfig({
+        isOpen: true,
+        type: "alert",
+        title: "No Data Available",
+        message: "No data available to export.",
+        confirmText: "Okay",
+        onConfirm: () => {},
+      });
       return;
     }
 
@@ -448,7 +495,14 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
   const exportToPDF = async () => {
     setIsExportMenuOpen(false);
     if (filteredLogs.length === 0) {
-      alert("No data available to export to PDF.");
+      setModalConfig({
+        isOpen: true,
+        type: "alert",
+        title: "No Data Available",
+        message: "No data available to export to PDF.",
+        confirmText: "Okay",
+        onConfirm: () => {},
+      });
       return;
     }
 
@@ -824,6 +878,15 @@ export default function AttendanceTab({ logs: initialLogs = [], schedules = [], 
           </div>
         )}
       </div>
+      <ActionModal 
+        isOpen={modalConfig.isOpen}
+        type={modalConfig.type}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        onClose={() => setModalConfig(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={modalConfig.onConfirm}
+        confirmText={modalConfig.confirmText}
+      />
     </div>
   );
 }

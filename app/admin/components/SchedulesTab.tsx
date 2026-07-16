@@ -14,6 +14,7 @@ import {
 } from "@/app/actions/schedule";
 import { Schedule } from "../types";
 import { usePusherEvent } from "@/hooks/usePusher";
+import ActionModal from "@/app/components/ActionModal";
 
 // --- Predefined University of the Assumption Laboratory Rooms ---
 const UA_LAB_ROOMS = [
@@ -198,6 +199,14 @@ function parseStartTime(timeStr: string) {
 export default function SchedulesTab({ schedules = [], teachers = [], refreshData }: SchedulesTabProps) {
   const [showArchived, setShowArchived] = useState(false); // 🟢 Tracks Active vs. Archive views
   const [searchTerm, setSearchTerm] = useState("");
+  const [modalConfig, setModalConfig] = useState({
+    isOpen: false,
+    type: "alert" as "alert" | "confirm" | "success" | "error",
+    title: "",
+    message: "",
+    confirmText: "Confirm",
+    onConfirm: () => {},
+  });
   const [dayFilter, setDayFilter] = useState("");
   const [roomFilter, setRoomFilter] = useState("");
   const [sectionFilter, setSectionFilter] = useState("");
@@ -344,23 +353,49 @@ export default function SchedulesTab({ schedules = [], teachers = [], refreshDat
   }
 
   async function handleDelete(id: number) {
-    if (confirm("Are you sure you want to delete this schedule? This action cannot be undone.")) {
-      setIsProcessing(true);
-      await deleteSchedule(id);
-      setIsProcessing(false);
-      refreshData();
-    }
+    setModalConfig({
+      isOpen: true,
+      type: "confirm",
+      title: "Delete Schedule",
+      message: "Are you sure you want to delete this schedule? This action cannot be undone.",
+      confirmText: "Delete",
+      onConfirm: async () => {
+        setModalConfig(prev => ({ ...prev, isOpen: false }));
+        setIsProcessing(true);
+        await deleteSchedule(id);
+        setIsProcessing(false);
+        refreshData();
+      }
+    });
   }
 
   // 🟢 Handles manual archiving of a single class
   async function handleArchive(id: number) {
-    if (confirm("Are you sure you want to archive this schedule? It can be restored later.")) {
-      setIsProcessing(true);
-      const res = await archiveSchedule(id);
-      setIsProcessing(false);
-      if (res.success) refreshData();
-      else alert(res.message);
-    }
+    setModalConfig({
+      isOpen: true,
+      type: "confirm",
+      title: "Archive Schedule",
+      message: "Are you sure you want to archive this schedule? It can be restored later.",
+      confirmText: "Archive",
+      onConfirm: async () => {
+        setModalConfig(prev => ({ ...prev, isOpen: false }));
+        setIsProcessing(true);
+        const res = await archiveSchedule(id);
+        setIsProcessing(false);
+        if (res.success) {
+          refreshData();
+        } else {
+          setModalConfig({
+            isOpen: true,
+            type: "error",
+            title: "Archive Failed",
+            message: res.message || "Failed to archive schedule.",
+            confirmText: "Okay",
+            onConfirm: () => {},
+          });
+        }
+      }
+    });
   }
 
   // 🟢 Restores an archived class back to active state
@@ -368,19 +403,47 @@ export default function SchedulesTab({ schedules = [], teachers = [], refreshDat
     setIsProcessing(true);
     const res = await unarchiveSchedule(id);
     setIsProcessing(false);
-    if (res.success) refreshData();
-    else alert(res.message);
+    if (res.success) {
+      refreshData();
+    } else {
+      setModalConfig({
+        isOpen: true,
+        type: "error",
+        title: "Restore Failed",
+        message: res.message || "Failed to restore schedule.",
+        confirmText: "Okay",
+        onConfirm: () => {},
+      });
+    }
   }
 
   // 🟢 Archives all schedules in the current semester
   async function handleArchiveAll() {
-    if (confirm("Are you sure you want to archive ALL active classes? This will refresh the active scheduler for the next academic term.")) {
-      setIsProcessing(true);
-      const res = await archiveAllSchedules();
-      setIsProcessing(false);
-      if (res.success) refreshData();
-      else alert(res.message);
-    }
+    setModalConfig({
+      isOpen: true,
+      type: "confirm",
+      title: "Archive All Schedules",
+      message: "Are you sure you want to archive ALL active classes? This will refresh the active scheduler for the next academic term.",
+      confirmText: "Archive All",
+      onConfirm: async () => {
+        setModalConfig(prev => ({ ...prev, isOpen: false }));
+        setIsProcessing(true);
+        const res = await archiveAllSchedules();
+        setIsProcessing(false);
+        if (res.success) {
+          refreshData();
+        } else {
+          setModalConfig({
+            isOpen: true,
+            type: "error",
+            title: "Archive All Failed",
+            message: res.message || "Failed to archive all schedules.",
+            confirmText: "Okay",
+            onConfirm: () => {},
+          });
+        }
+      }
+    });
   }
 
   async function handleAssignTeacher(e: React.FormEvent) {
@@ -694,6 +757,15 @@ export default function SchedulesTab({ schedules = [], teachers = [], refreshDat
           </div>
         </div>
       )}
+      <ActionModal 
+        isOpen={modalConfig.isOpen}
+        type={modalConfig.type}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        onClose={() => setModalConfig(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={modalConfig.onConfirm}
+        confirmText={modalConfig.confirmText}
+      />
     </div>
   );
 }

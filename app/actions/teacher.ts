@@ -227,6 +227,8 @@ export async function manuallyAdmitStudent(data: {
 
     try {
       const studentDisplayName = `${student.first_name || ""} ${student.last_name || ""}`.trim() || data.studentId;
+      
+      // ✅ BROADCAST SIG AND ISMANUAL FLAG IN REAL-TIME
       await pusherServer.trigger("attendance-channel", "new-attendance", {
         id: newLog.id,
         studentName: studentDisplayName,
@@ -238,6 +240,9 @@ export async function manuallyAdmitStudent(data: {
         courseCode: schedule.course_code,
         section: schedule.section,
         createdAt: newLog.timestamp.toISOString(),
+        signature: newLog.signature, // ✅ FIXED: Included signature in payload
+        isManual: true,              // ✅ FIXED: Included flag in payload
+        scheduleId: schedule.id,
       });
     } catch (pusherError) {
       console.error("[PUSHER ERROR] Failed real-time override broadcast:", pusherError);

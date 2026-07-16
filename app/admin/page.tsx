@@ -15,9 +15,18 @@ import SchedulesTab from "./components/SchedulesTab";
 import DevicesTab from "./components/DevicesTab";
 import TeachersTab from "./components/TeachersTab";
 import AuditLogsTab from "./components/AuditLogsTab";
+import ActionModal from "@/app/components/ActionModal";
 
 export default function AdminDashboard() {
   const [isInitializing, setIsInitializing] = useState<boolean>(true);
+  const [modalConfig, setModalConfig] = useState({
+    isOpen: false,
+    type: "alert" as "alert" | "confirm" | "success" | "error",
+    title: "",
+    message: "",
+    confirmText: "Confirm",
+    onConfirm: () => {},
+  });
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [adminId, setAdminId] = useState<string>("");
   const [password, setPassword] = useState<string>("");
@@ -106,21 +115,39 @@ export default function AdminDashboard() {
   }
 
   async function handleResetDevice(targetStudentId: string) {
-    if (
-      confirm(
-        `Are you certain you want to reset the device for Student ID: ${targetStudentId}?`,
-      )
-    ) {
-      setIsLoading(true);
-      const response = await resetStudentDevice(targetStudentId);
-      if (response.success) {
-        alert("Device reset successfully.");
-        fetchDashboardData();
-      } else {
-        alert("Failed to reset device.");
+    setModalConfig({
+      isOpen: true,
+      type: "confirm",
+      title: "Reset Student Device",
+      message: `Are you certain you want to reset the device for Student ID: ${targetStudentId}?`,
+      confirmText: "Reset Device",
+      onConfirm: async () => {
+        setModalConfig(prev => ({ ...prev, isOpen: false }));
+        setIsLoading(true);
+        const response = await resetStudentDevice(targetStudentId);
+        if (response.success) {
+          setModalConfig({
+            isOpen: true,
+            type: "success",
+            title: "Success",
+            message: "Device reset successfully.",
+            confirmText: "Okay",
+            onConfirm: () => {},
+          });
+          fetchDashboardData();
+        } else {
+          setModalConfig({
+            isOpen: true,
+            type: "error",
+            title: "Error",
+            message: "Failed to reset device.",
+            confirmText: "Okay",
+            onConfirm: () => {},
+          });
+        }
+        setIsLoading(false);
       }
-      setIsLoading(false);
-    }
+    });
   }
 
   if (isInitializing) {
@@ -320,6 +347,15 @@ export default function AdminDashboard() {
           <AuditLogsTab auditLogs={auditLogs} />
         </div>
       </div>
+      <ActionModal 
+        isOpen={modalConfig.isOpen}
+        type={modalConfig.type}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        onClose={() => setModalConfig(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={modalConfig.onConfirm}
+        confirmText={modalConfig.confirmText}
+      />
     </main>
   );
 }

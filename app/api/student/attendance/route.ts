@@ -158,6 +158,8 @@ export async function POST(req: Request) {
         courseCode: matchedSchedule.course_code,
         section: matchedSchedule.section,
         createdAt: newLog.timestamp,
+        signature: signature,
+        scheduleId: matchedSchedule.id,
       });
     } catch (pusherError) {
       console.error("[REALTIME_BROADCAST_ERROR] Failed to push live attendance log:", pusherError);

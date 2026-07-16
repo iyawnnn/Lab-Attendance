@@ -17,6 +17,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { createStaffAccount, deleteTeacherAccount } from "@/app/actions/admin";
+import ActionModal from "@/app/components/ActionModal";
 import {
   assignTeacherToMultipleSchedules,
   removeTeacherFromSchedule,
@@ -168,6 +169,14 @@ export default function TeachersTab({
 }: TeachersTabProps) {
   // Directory Filtering & Pagination States
   const [searchQuery, setSearchQuery] = useState("");
+  const [modalConfig, setModalConfig] = useState({
+    isOpen: false,
+    type: "alert" as "alert" | "confirm" | "success" | "error",
+    title: "",
+    message: "",
+    confirmText: "Confirm",
+    onConfirm: () => {},
+  });
   const [roleFilter, setRoleFilter] = useState<string>("");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -291,7 +300,14 @@ export default function TeachersTab({
     setIsLoading(false);
 
     if (response.success) {
-      alert(response.message);
+      setModalConfig({
+        isOpen: true,
+        type: "success",
+        title: "Success",
+        message: response.message || "Staff account created successfully.",
+        confirmText: "Okay",
+        onConfirm: () => {},
+      });
       setIsRegisterModalOpen(false);
       setUserId("");
       setName("");
@@ -299,7 +315,14 @@ export default function TeachersTab({
       setRole("TEACHER");
       refreshData();
     } else {
-      alert(response.message || "Failed to create staff account.");
+      setModalConfig({
+        isOpen: true,
+        type: "error",
+        title: "Registration Failed",
+        message: response.message || "Failed to create staff account.",
+        confirmText: "Okay",
+        onConfirm: () => {},
+      });
     }
   }
 
@@ -320,7 +343,14 @@ export default function TeachersTab({
     if (response.success) {
       refreshData();
     } else {
-      alert(response.message || "Failed to delete staff account.");
+      setModalConfig({
+        isOpen: true,
+        type: "error",
+        title: "Deletion Failed",
+        message: response.message || "Failed to delete staff account.",
+        confirmText: "Okay",
+        onConfirm: () => {},
+      });
     }
   }
 
@@ -914,6 +944,15 @@ export default function TeachersTab({
           </div>
         </div>
       )}
+      <ActionModal 
+        isOpen={modalConfig.isOpen}
+        type={modalConfig.type}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        onClose={() => setModalConfig(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={modalConfig.onConfirm}
+        confirmText={modalConfig.confirmText}
+      />
     </div>
   );
 }

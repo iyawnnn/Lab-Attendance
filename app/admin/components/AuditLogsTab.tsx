@@ -6,6 +6,7 @@ import { Search, ChevronDown, Check, X, FileText, Download, ShieldAlert } from "
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { AuditLog } from "../types";
+import ActionModal from "@/app/components/ActionModal";
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -144,6 +145,14 @@ function FilterDropdown({
 export default function AuditLogsTab({ auditLogs }: { auditLogs: AuditLog[] }) {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
+  const [modalConfig, setModalConfig] = useState({
+    isOpen: false,
+    type: "alert" as "alert" | "confirm" | "success" | "error",
+    title: "",
+    message: "",
+    confirmText: "Confirm",
+    onConfirm: () => {},
+  });
   const [dateFilter, setDateFilter] = useState("");
   const [actionFilter, setActionFilter] = useState("");
 
@@ -250,7 +259,14 @@ export default function AuditLogsTab({ auditLogs }: { auditLogs: AuditLog[] }) {
   async function downloadPDF() {
     setIsExportMenuOpen(false);
     if (filteredLogs.length === 0) {
-      alert("No administrative audit log data available to export.");
+      setModalConfig({
+        isOpen: true,
+        type: "alert",
+        title: "No Data Available",
+        message: "No administrative audit log data available to export.",
+        confirmText: "Okay",
+        onConfirm: () => {},
+      });
       return;
     }
 
@@ -496,6 +512,15 @@ export default function AuditLogsTab({ auditLogs }: { auditLogs: AuditLog[] }) {
           </div>
         )}
       </div>
+      <ActionModal 
+        isOpen={modalConfig.isOpen}
+        type={modalConfig.type}
+        title={modalConfig.title}
+        message={modalConfig.message}
+        onClose={() => setModalConfig(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={modalConfig.onConfirm}
+        confirmText={modalConfig.confirmText}
+      />
     </div>
   );
 }

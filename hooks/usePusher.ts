@@ -1,5 +1,4 @@
-// hooks/usePusher.ts
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { pusherClient } from '@/lib/pusherClient';
 
 export function usePusherEvent<T>(
@@ -7,16 +6,27 @@ export function usePusherEvent<T>(
   eventName: string,
   callback: (data: T) => void
 ) {
+  const callbackRef = useRef(callback);
+
+  useEffect(() => {
+    callbackRef.current = callback;
+  }, [callback]);
+
   useEffect(() => {
     // Safety guard: do not execute on server side or if initialization isn't ready
     if (!pusherClient) return;
 
     const channel = pusherClient.subscribe(channelName);
-    channel.bind(eventName, callback);
+    
+    const handler = (data: T) => {
+      callbackRef.current(data);
+    };
+
+    channel.bind(eventName, handler);
 
     return () => {
-      channel.unbind(eventName, callback);
+      channel.unbind(eventName, handler);
       pusherClient.unsubscribe(channelName);
     };
-  }, [channelName, eventName, callback]);
+  }, [channelName, eventName]);
 }
