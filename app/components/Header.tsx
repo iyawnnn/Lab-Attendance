@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+// 🟢 IMPORT: Added usePathname to monitor the active route
+import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X, ArrowRight } from "lucide-react";
 
@@ -13,6 +15,9 @@ interface HeaderProps {
 export default function Header({ onNavigateSection, forceSolid = false }: HeaderProps) {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  
+  // 🟢 HOOK: Instantiate the pathname hook
+  const pathname = usePathname();
 
   /* Monitors window scroll depth to transition header background from transparent to solid white */
   useEffect(() => {
@@ -48,16 +53,21 @@ export default function Header({ onNavigateSection, forceSolid = false }: Header
         aria-label="Main Navigation"
       >
         {/* Brand Logo and Name */}
-        <Link href="/" className="flex items-center space-x-2.5 sm:space-x-3.5 group shrink-0"
-              onClick={(e) => {
-                e.preventDefault(); // Prevents the "#" from being added to your URL
-                window.scrollTo({ top: 0, behavior: 'smooth' }); // Scrolls smoothly to the very top
-        }}>
-
+        <Link 
+          href="/" 
+          className="flex items-center space-x-2.5 sm:space-x-3.5 group shrink-0"
+          onClick={(e) => {
+            // 🟢 FIXED: Only prevent default if we're already home, otherwise let Next.js navigate to "/"
+            if (pathname === "/") {
+              e.preventDefault();
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }
+          }}
+        >
           <div className="w-9 h-9 sm:w-10 sm:h-10 relative overflow-hidden transition-transform group-hover:scale-105 rounded-full bg-white p-1 shadow-xs shrink-0">
             <img
               src="/ua-logo.png"
-              alt="University of Assumption Official Seal"
+              alt="University of the Assumption Official Seal"
               width="40"
               height="40"
               className="w-full h-full object-contain"
@@ -76,7 +86,7 @@ export default function Header({ onNavigateSection, forceSolid = false }: Header
                 isSolidHeader ? "text-[#A51A21]" : "text-[#FED702]"
               }`}
             >
-              UNIVERSITY OF ASSUMPTION
+              UNIVERSITY OF THE ASSUMPTION
             </span>
           </div>
         </Link>
@@ -135,11 +145,7 @@ export default function Header({ onNavigateSection, forceSolid = false }: Header
           >
             <Link
               href="/student"
-              className={`inline-flex items-center text-sm font-extrabold px-5 py-2.5 rounded-xl transition-all shadow-md ${
-                isSolidHeader
-                  ? "bg-[#011B51] text-[#FED702] hover:bg-[#A51A21] hover:text-white"
-                  : "bg-[#FED702] text-[#011B51] hover:bg-white"
-              }`}
+              className="inline-flex items-center text-sm font-extrabold px-5 py-2.5 rounded-xl transition-all shadow-md bg-[#FED702] text-[#011B51] hover:bg-white"
             >
               <span>Student Login</span>
               <ArrowRight className="ml-1.5 w-4 h-4 stroke-[2.5]" />

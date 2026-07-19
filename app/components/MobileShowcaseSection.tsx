@@ -41,7 +41,7 @@ export default function MobileShowcaseSection({
               </h2>
 
               <p className="text-xs sm:text-base font-semibold text-white/85 leading-relaxed max-w-xl">
-                The official University of Assumption mobile application allows students to securely record attendance through room PIN authorization and low-latency location checks directly on Android devices.
+                The official University of the Assumption mobile application allows students to securely record attendance through room PIN authorization and low-latency location checks directly on Android devices.
               </p>
 
               {/* Action Badges */}
@@ -53,7 +53,7 @@ export default function MobileShowcaseSection({
                   className="inline-block transition-transform hover:-translate-y-0.5 shrink-0"
                 >
                   <img
-                    alt="Get it on Google Play badge for University of Assumption Mobile App"
+                    alt="Get it on Google Play badge for University of the Assumption Mobile App"
                     src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png"
                     className="h-12 sm:h-16 w-auto object-contain"
                   />
@@ -83,7 +83,7 @@ export default function MobileShowcaseSection({
                     {screenshotPath ? (
                       <img
                         src={screenshotPath}
-                        alt="University of Assumption Mobile Attendance Portal Interface"
+                        alt="University of the Assumption Mobile Attendance Portal Interface"
                         className="w-full h-full object-cover object-top"
                       />
                     ) : (
@@ -92,7 +92,7 @@ export default function MobileShowcaseSection({
                           <div className="flex items-center space-x-2 pt-2">
                             <img
                               src="/ua-logo.png"
-                              alt="University Seal"
+                              alt="University of the Assumption Seal"
                               width="24"
                               height="24"
                               className="w-6 h-6 object-contain"

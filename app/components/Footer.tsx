@@ -19,40 +19,76 @@ export default function Footer({ onNavigateSection }: FooterProps) {
   };
 
   return (
-    <footer className="bg-[#011B51] text-white pt-16 pb-10 border-t border-white/10 relative overflow-hidden font-sans">
+    <footer className="bg-[#011B51] text-white pt-12 pb-8 border-t border-white/10 relative overflow-hidden font-sans">
       <div className="max-w-7xl mx-auto px-6 relative z-10">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-10 md:gap-12 mb-16 text-left">
+        
+        {/* Tier 1: Top Brand & Partnership Header Bar */}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pb-6 border-b border-white/10 mb-6 gap-6">
           
-          {/* Brand & Institution Info */}
-          <div className="md:col-span-1 space-y-4">
-            <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-full bg-white p-1.5 flex items-center justify-center shadow-md shrink-0">
-                <img 
-                  src="/ua-logo.png" 
-                  alt="University of Assumption Official Seal" 
-                  className="w-full h-full object-contain" 
-                />
-              </div>
-              <div className="leading-tight">
-                <span className="text-base font-extrabold tracking-tight block text-white">
-                  University of Assumption
-                </span>
-                <span className="text-[10px] font-bold text-[#FED702] uppercase tracking-widest block">
-                  UA LabSign System
-                </span>
-              </div>
+          {/* Left Side: Core Institutional Branding */}
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-full bg-white p-1.5 flex items-center justify-center shadow-md shrink-0">
+              <img 
+                src="/ua-logo.png" 
+                alt="University of the Assumption Official Seal" 
+                className="w-full h-full object-contain" 
+              />
             </div>
-            <p className="text-white/70 font-medium text-xs leading-relaxed">
-              A Zero-Trust cryptographic attendance ecosystem engineered to secure laboratory session integrity and prevent proxy check-ins across University of Assumption facilities.
+            <div className="leading-tight">
+              <span className="text-base font-extrabold tracking-tight block text-white">
+                University of the Assumption
+              </span>
+              <span className="text-[10px] font-bold text-[#FED702] uppercase tracking-widest block">
+                UA LabSign System
+              </span>
+            </div>
+          </div>
+          
+          {/* Right Side: Structural flow for CIT Branding */}
+          <a 
+            href="https://ua-cit.com/" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="flex items-center space-x-3 group text-left transition-opacity hover:opacity-95"
+          >
+            <div className="w-10 h-10 rounded-full bg-white p-1.5 flex items-center justify-center shadow-md shrink-0 transition-transform group-hover:scale-105 active:scale-95">
+              <img 
+                src="/cit_logo.png" 
+                alt="UA College of Information Technology Logo" 
+                className="w-full h-full object-contain" 
+              />
+            </div>
+            <div className="leading-tight">
+              <span className="text-[10px] font-bold text-[#FED702] uppercase tracking-widest block mb-0.5">
+                Presented By
+              </span>
+              <span className="text-base font-extrabold tracking-tight text-white group-hover:text-[#FED702] transition-colors flex items-center gap-1">
+                College of Information Technology
+                <ArrowUpRight className="w-3.5 h-3.5 text-white/40 group-hover:text-[#FED702] transition-colors shrink-0" />
+              </span>
+            </div>
+          </a>
+        </div>
+
+        {/* 🟢 Tier 2: Updated to 5-column grid layout to squeeze out empty layout gaps */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-8 mb-8 text-left items-start">
+          
+          {/* 🟢 Column 1: Core System Architecture Overview (Set to col-span-2 for text breathing room) */}
+          <div className="space-y-3 md:col-span-2">
+            <h3 className="font-extrabold text-[#FED702] text-xs uppercase tracking-widest">
+              System Overview
+            </h3>
+            <p className="text-white/70 font-medium text-xs leading-relaxed max-w-sm">
+              A Zero-Trust cryptographic attendance ecosystem engineered to secure laboratory session integrity and prevent proxy check-ins across University of the Assumption facilities.
             </p>
           </div>
 
-          {/* Quick Links */}
-          <div className="space-y-4">
+          {/* Column 2: Quick Application Navigation */}
+          <div className="space-y-3 md:col-span-1">
             <h3 className="font-extrabold text-[#FED702] text-xs uppercase tracking-widest">
               Navigation
             </h3>
-            <ul className="space-y-3 text-xs font-semibold text-white/80">
+            <ul className="space-y-2.5 text-xs font-semibold text-white/80">
               <li>
                 <Link href="/student" className="hover:text-[#FED702] transition-colors">
                   Student Portal
@@ -88,12 +124,12 @@ export default function Footer({ onNavigateSection }: FooterProps) {
             </ul>
           </div>
 
-          {/* Legal Pages */}
-          <div className="space-y-4">
+          {/* Column 3: Legal Governance & Protocols */}
+          <div className="space-y-3 md:col-span-1">
             <h3 className="font-extrabold text-[#FED702] text-xs uppercase tracking-widest">
               Governance &amp; Security
             </h3>
-            <ul className="space-y-3 text-xs font-semibold text-white/80">
+            <ul className="space-y-2.5 text-xs font-semibold text-white/80">
               <li>
                 <Link href="/privacy" className="hover:text-[#FED702] transition-colors">
                   Privacy Policy
@@ -112,14 +148,14 @@ export default function Footer({ onNavigateSection }: FooterProps) {
             </ul>
           </div>
 
-          {/* Official Contact & Socials */}
-          <div className="space-y-4">
+          {/* Column 4: Official Communication Channels */}
+          <div className="space-y-3 md:col-span-1">
             <h3 className="font-extrabold text-[#FED702] text-xs uppercase tracking-widest">
               Official Channels
             </h3>
-            <ul className="space-y-3 text-xs font-semibold text-white/80">
-              <li className="flex items-center space-x-2">
-                <MapPin className="w-4 h-4 text-[#FED702] flex-shrink-0" />
+            <ul className="space-y-2.5 text-xs font-semibold text-white/80">
+              <li className="flex items-start space-x-2">
+                <MapPin className="w-4 h-4 text-[#FED702] flex-shrink-0 mt-0.5" />
                 <span>City of San Fernando, Pampanga, Philippines</span>
               </li>
               <li>
@@ -160,10 +196,18 @@ export default function Footer({ onNavigateSection }: FooterProps) {
 
         </div>
 
-        {/* Bottom Bar */}
-        <div className="border-t border-white/10 pt-8 flex flex-col sm:flex-row justify-between items-center text-xs font-semibold text-white/50">
-          <p>&copy; {new Date().getFullYear()} University of Assumption. All rights reserved.</p>
-          <p className="mt-2 sm:mt-0">Developed by BSIT Students of University of Assumption</p>
+        {/* Tier 3: Sub-Footer Copyright & Developer Panel Attribution */}
+        <div className="border-t border-white/10 pt-6 flex flex-col sm:flex-row justify-between items-start text-xs font-semibold text-white/50 gap-4">
+          <p className="pt-0.5">&copy; {new Date().getFullYear()} University of the Assumption. All rights reserved.</p>
+          
+          <div className="text-left sm:text-right">
+            <p className="text-white/80 font-bold tracking-wider">
+              Developed by <span className="text-[#FED702]">Team GACHODA</span>
+            </p>
+            <p className="text-[10px] text-white/40 font-medium tracking-wide mt-0.5 normal-case">
+              Garcia, Ochoa, Pineda
+            </p>
+          </div>
         </div>
       </div>
     </footer>

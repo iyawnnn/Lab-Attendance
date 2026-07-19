@@ -44,7 +44,7 @@ const faqData: FaqItem[] = [
     category: "Authentication & Eligibility",
     question: "Which email accounts are eligible to access the UA LabSign system?",
     answer:
-      "Access is restricted exclusively to active University of Assumption institutional Google accounts ending in @ua.edu.ph. Personal Gmail accounts or external emails are automatically rejected at the login portal.",
+      "Access is restricted exclusively to active University of the Assumption institutional Google accounts ending in @ua.edu.ph. Personal Gmail accounts or external emails are automatically rejected at the login portal.",
   },
   {
     id: "faq-6",
@@ -79,7 +79,7 @@ export default function FaqSection() {
               Frequently Asked Questions
             </h2>
             <p className="text-sm sm:text-base font-semibold text-gray-600 leading-relaxed">
-              Find clear answers regarding geofence verification, device binding, cryptographic privacy, and attendance policies across University of Assumption laboratories.
+              Find clear answers regarding geofence verification, device binding, cryptographic privacy, and attendance policies across University of the Assumption laboratories.
             </p>
           </div>
 

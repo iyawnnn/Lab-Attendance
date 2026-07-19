@@ -20,7 +20,7 @@ export default function AboutSection() {
           <div className="lg:col-span-8 space-y-10">
             <div className="space-y-5">
               <h2 className="text-2xl sm:text-4xl font-extrabold text-[#011B51] leading-snug tracking-tight">
-                University of Assumption is committed to academic excellence by modernizing classroom management and eliminating manual paper sign-in sheets.
+                University of the Assumption is committed to academic excellence by modernizing classroom management and eliminating manual paper sign-in sheets.
               </h2>
               
               <p className="text-gray-700 text-base sm:text-lg font-medium leading-relaxed max-w-3xl">

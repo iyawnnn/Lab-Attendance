@@ -17,7 +17,7 @@ export default function HeroSection({ onNavigateSection }: HeroSectionProps) {
       <div className="absolute inset-0 z-0">
         <img
           src="/lab-background.jpg"
-          alt="University of Assumption Campus"
+          alt="University of the Assumption Campus"
           width="1920"
           height="1080"
           className="w-full h-full object-cover object-center"
@@ -33,7 +33,7 @@ export default function HeroSection({ onNavigateSection }: HeroSectionProps) {
           {/* Headline */}
           <div className="lg:col-span-7 space-y-3">
             <span className="text-[#FED702] font-black text-xs sm:text-sm uppercase tracking-widest block drop-shadow-xs">
-              University of Assumption
+              University of the Assumption
             </span>
             <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black text-white leading-[1.10] tracking-tight drop-shadow-sm">
               Every Session Counts. <br className="hidden sm:inline" />
