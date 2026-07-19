@@ -192,25 +192,25 @@ export async function deleteTeacherAccount(teacherDbId: number) {
 
 export async function resetStudentDevice(studentId: string) {
   try {
-    // 🟢 FIXED: We removed `recovery_pin: ""` from the update query.
-    // This preserves their securely hashed 6-digit Recovery PIN in the database.
+    // Clear BOTH the public key and recovery pin so the profile resets entirely
     await prisma.student.update({
       where: { student_id: studentId },
-      data: { 
-        public_key: "" 
+      data: {
+        public_key: "",
+        recovery_pin: ""
       },
     });
 
-    // Updated log text to accurately reflect we only revoked the hardware key, not the PIN
+    // Updated log text to accurately reflect both are cleared
     await logAdminAction(
       "RESET_STUDENT_DEVICE",
-      `Revoked hardware key registration for student ID ${studentId}.`,
+      `Revoked hardware key registration and recovery PIN for student ID ${studentId}.`,
       studentId
     );
 
     return {
       success: true,
-      message: "Student device access revoked successfully.",
+      message: "Student device access and recovery PIN revoked successfully.",
     };
   } catch (error) {
     return { success: false, message: "Failed to reset student device." };
