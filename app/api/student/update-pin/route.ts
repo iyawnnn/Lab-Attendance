@@ -1,15 +1,13 @@
-// app/api/student/update-pin/route.ts
-
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { createHash } from "crypto";
-import { pusherServer } from "@/lib/pusherServer"; // Integrated Pusher server instance[cite: 1]
+import { pusherServer } from "@/lib/pusherServer"; 
 
 export async function POST(request: Request) {
   console.log("[RECOVER_STEP_2] Committing fresh PIN credentials.");
 
   try {
-    const { studentId, newPin, sessionToken } = await request.json();
+    const { studentId, newPin, sessionToken, publicKey } = await request.json();
 
     if (!studentId || !newPin || !sessionToken) {
       return NextResponse.json({ success: false, message: "Missing required parameters." }, { status: 400 });
@@ -31,7 +29,11 @@ export async function POST(request: Request) {
 
     await prisma.student.update({
       where: { student_id: cleanStudentId },
-      data: { recovery_pin: hashedPin },
+      data: { 
+        recovery_pin: hashedPin,
+        // Safely bind the device public key if it was included in the request payload
+        ...(publicKey ? { public_key: String(publicKey).trim() } : {})
+      },
     });
 
     console.log(`[PIN_UPDATE] Recovery PIN successfully updated for Student ID: ${cleanStudentId}`);

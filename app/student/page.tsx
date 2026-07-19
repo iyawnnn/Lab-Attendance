@@ -132,6 +132,25 @@ function StudentPortalContent() {
             },
           });
 
+          const data = await checkRes.json();
+
+          // Intercept unconfigured/revoked background states on session boot[cite: 2]
+          if (data.status === "unconfigured" || data.needsPinConfig) {
+            console.log("[CHECK_STATUS] Profile parameters unconfigured or reset by admin.");
+            await del("student_private_key");
+            await del("student_id");
+            await del("student_public_key");
+            await del("session_token");
+            if (typeof window !== "undefined") {
+              sessionStorage.removeItem("google_id_token");
+              sessionStorage.removeItem("google_email");
+            }
+            setView("login");
+            setIsError(true);
+            setMessage("Your device access registration was revoked by an administrator.");
+            return;
+          }
+
           if (checkRes.status === 401 || !checkRes.ok) {
             await del("student_private_key");
             await del("student_id");
@@ -185,6 +204,27 @@ function StudentPortalContent() {
               "x-session-token": localSessionToken || "",
             },
           });
+
+          const data = await response.json();
+
+          // Intercept active session revocation loop on real-time poll[cite: 2]
+          if (data.status === "unconfigured" || data.needsPinConfig) {
+            console.warn("[SECURITY] Active configuration session revoked by admin panel controls.");
+            await del("student_private_key");
+            await del("student_id");
+            await del("student_public_key");
+            await del("session_token");
+            if (typeof window !== "undefined") {
+              sessionStorage.removeItem("google_id_token");
+              sessionStorage.removeItem("google_email");
+            }
+
+            setRegisteredId(null);
+            setView("login");
+            setIsError(true);
+            setMessage("Active session revoked. Device profile parameters reset by administrator.");
+            return;
+          }
 
           if (response.status === 401) {
             console.warn("[SECURITY] Session token mismatch detected. Evicting local token context.");
@@ -271,6 +311,32 @@ function StudentPortalContent() {
       if (!res.ok) {
         setIsError(true);
         setMessage(data.error || "Google authentication rejected.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Check if student profile was cleared out completely by backend device reset[cite: 2]
+      if (data.status === "unconfigured" || data.needsPinConfig || (data.isRegistered && data.publicKey === "")) {
+        const keyPair = await window.crypto.subtle.generateKey(
+          { name: "ECDSA", namedCurve: "P-256" },
+          false,
+          ["sign", "verify"]
+        );
+
+        const exportedPublicKey = await window.crypto.subtle.exportKey("spki", keyPair.publicKey);
+        const publicKeyArray = Array.from(new Uint8Array(exportedPublicKey));
+        const publicKeyBase64 = btoa(String.fromCharCode(...publicKeyArray));
+
+        setStudentId(data.studentId);
+        setCachedSessionToken(data.sessionToken);
+        setCachedKeyPair(keyPair);
+        setCachedPublicKeyBase64(publicKeyBase64);
+
+        setGoogleEmail(data.email || googleEmail);
+        setFirstName(data.firstName || firstName);
+        setLastName(data.lastName || lastName);
+
+        setView("recovery_set_pin");
         setIsSubmitting(false);
         return;
       }
@@ -498,6 +564,7 @@ function StudentPortalContent() {
           studentId: studentId,
           newPin: newRecoveryPin,
           sessionToken: cachedSessionToken,
+          publicKey: cachedPublicKeyBase64, // Bound fresh public key mapping directly[cite: 2]
         }),
       });
 
@@ -762,7 +829,7 @@ function StudentPortalContent() {
                   />
                 </div>
                 <p className="text-[11px] text-slate-400 font-medium leading-relaxed">
-                  Access parameters restrict identity checking exclusively to <span className="font-bold text-[#011B51]">@ua.edu.ph</span> emails.
+                  Access parameters restrict identity checking exclusively to valid @ua.edu.ph accounts.
                 </p>
               </div>
 
@@ -858,7 +925,7 @@ function StudentPortalContent() {
                 </div>
 
                 <button type="submit" disabled={isSubmitting} className="w-full bg-[#011B51] hover:bg-[#022a7a] text-white font-bold py-3.5 rounded-xl transition-all shadow-md border-b-4 border-[#A51A21] disabled:opacity-70 text-xs uppercase tracking-wider cursor-pointer">
-                  {isSubmitting ? "Registering Profile..." : "Complete Setup & Register"}
+                  Complete Setup & Register
                 </button>
               </form>
 
@@ -911,7 +978,7 @@ function StudentPortalContent() {
                 </div>
 
                 <button type="submit" disabled={isSubmitting} className="w-full bg-[#011B51] hover:bg-[#022a7a] text-white font-bold py-3.5 rounded-xl transition-all shadow-md border-b-4 border-[#A51A21] disabled:opacity-70 text-xs uppercase tracking-wider cursor-pointer">
-                  {isSubmitting ? "Verifying..." : "Verify & Evict Other Terminal"}
+                  Verify & Evict Other Terminal
                 </button>
               </form>
 
@@ -977,7 +1044,7 @@ function StudentPortalContent() {
                 </div>
 
                 <button type="submit" disabled={isSubmitting} className="w-full bg-[#011B51] hover:bg-[#022a7a] text-white font-bold py-3.5 rounded-xl transition-all shadow-md border-b-4 border-[#A51A21] disabled:opacity-70 text-xs uppercase tracking-wider cursor-pointer">
-                  {isSubmitting ? "Finalizing PIN..." : "Confirm PIN & Complete Setup"}
+                  Confirm PIN & Complete Setup
                 </button>
               </form>
             </div>

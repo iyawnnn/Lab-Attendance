@@ -36,6 +36,20 @@ export async function GET(request: Request) {
       );
     }
 
+    // Catches when the admin completely wiped both fields using resetStudentDevice
+    if (student.public_key === "" && student.recovery_pin === "") {
+      console.log(`[CHECK_STATUS] Student ID: ${cleanStudentId} has no registered hardware key or recovery PIN. Forcing setup routing.`);
+      return NextResponse.json(
+        { 
+          revoked: false, 
+          status: "unconfigured",
+          needsPinConfig: true,
+          message: "Profile Recovery PIN configuration required." 
+        },
+        { status: 200 }
+      );
+    }
+
     // Strict Single Active Session Enforcement validation layer[cite: 1]
     if (sessionToken && student.session_token !== sessionToken) {
       console.warn(
@@ -52,18 +66,24 @@ export async function GET(request: Request) {
     }
 
     // Cryptographic Device Binding tracking check layer
-    if (publicKey && student.public_key !== publicKey) {
-      console.warn(
-        `[CHECK_STATUS] Cryptographic binding signature shift detected for student ID: ${cleanStudentId}.`
-      );
-      return NextResponse.json(
-        { 
-          revoked: true, 
-          reason: "key_mismatch",
-          error: "Device binding altered. Cryptographic hardware signature mismatch." 
-        },
-        { status: 401 }
-      );
+    if (publicKey) {
+      // 🟢 NORMALIZATION FIX: Strip spaces, newlines, and match '+' representations safely
+      const normalizedDbKey = String(student.public_key).replace(/[\s\n\r]/g, "").replace(/\+/g, " ");
+      const normalizedParamKey = String(publicKey).replace(/[\s\n\r]/g, "").replace(/\+/g, " ");
+
+      if (normalizedDbKey !== normalizedParamKey) {
+        console.warn(
+          `[CHECK_STATUS] Cryptographic binding signature shift detected for student ID: ${cleanStudentId}.`
+        );
+        return NextResponse.json(
+          { 
+            revoked: true, 
+            reason: "key_mismatch",
+            error: "Device binding altered. Cryptographic hardware signature mismatch." 
+          },
+          { status: 401 }
+        );
+      }
     }
 
     console.log(`[CHECK_STATUS] Structural integrity verified for Student ID: ${cleanStudentId}. Session is valid.`);

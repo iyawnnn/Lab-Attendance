@@ -8,20 +8,28 @@ interface GeofenceGuardProps {
   children: ReactNode;
 }
 
+const DEFAULT_CAMPUS_LAT = 15.036950;
+const DEFAULT_CAMPUS_LNG = 120.697467;
+const DEFAULT_RADIUS = 75;
+
 export default function GeofenceGuard({ children }: GeofenceGuardProps) {
   const [status, setStatus] = useState<"checking" | "allowed" | "denied" | "error">("checking");
   const [errorMessage, setErrorMessage] = useState("");
   const watchIdRef = useRef<number | null>(null);
 
-  // Core logic to check distance against university coordinates
   const evaluatePosition = (position: GeolocationPosition) => {
-    const targetLat = parseFloat(process.env.NEXT_PUBLIC_CAMPUS_LAT || "0");
-    const targetLng = parseFloat(process.env.NEXT_PUBLIC_CAMPUS_LNG || "0");
-    const maxRadius = parseFloat(process.env.NEXT_PUBLIC_GEOFENCE_RADIUS_METERS || "75");
+    const targetLat = parseFloat(process.env.NEXT_PUBLIC_CAMPUS_LAT || "") || DEFAULT_CAMPUS_LAT;
+    const targetLng = parseFloat(process.env.NEXT_PUBLIC_CAMPUS_LNG || "") || DEFAULT_CAMPUS_LNG;
+    const maxRadius = parseFloat(process.env.NEXT_PUBLIC_GEOFENCE_RADIUS_METERS || "") || DEFAULT_RADIUS;
 
     const distanceInMeters = getDistance(
       { latitude: position.coords.latitude, longitude: position.coords.longitude },
       { latitude: targetLat, longitude: targetLng }
+    );
+
+    console.log(
+      `[WEB GPS] Extension Coords: (${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}) | ` +
+      `Calculated Distance: ${distanceInMeters}m | Allowed Radius: ${maxRadius}m`
     );
 
     if (distanceInMeters <= maxRadius) {
@@ -31,7 +39,6 @@ export default function GeofenceGuard({ children }: GeofenceGuardProps) {
     }
   };
 
-  // Error handler for browser geolocation exceptions
   const handleError = (error: GeolocationPositionError) => {
     setStatus("error");
     switch (error.code) {
@@ -50,7 +57,6 @@ export default function GeofenceGuard({ children }: GeofenceGuardProps) {
     }
   };
 
-  // Start the continuous geolocation hardware watcher
   const startWatching = () => {
     if (!navigator.geolocation) {
       setStatus("error");
@@ -71,29 +77,14 @@ export default function GeofenceGuard({ children }: GeofenceGuardProps) {
 
   // Forced hardware refresh for the manual retry button
   const handleRetry = () => {
-    setStatus("checking");
-    setErrorMessage("");
-
-    if (watchIdRef.current !== null) {
-      navigator.geolocation.clearWatch(watchIdRef.current);
-      watchIdRef.current = null;
+    console.log("[GEOFENCE] Automating full tab reload to flush sticky browser extension context.");
+    
+    // Programmatically trigger a full page refresh (F5) to force the extension script to re-initialize with new coordinates
+    if (typeof window !== "undefined") {
+      window.location.reload();
     }
-
-    // Explicitly request a fresh, un-cached position before restarting the watcher
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        evaluatePosition(position);
-        startWatching(); // Resume continuous monitoring
-      },
-      (error) => {
-        handleError(error);
-        startWatching(); // Restart watcher anyway so it can auto-recover
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
   };
 
-  // Initialize watchers on component mount and clean up on unmount
   useEffect(() => {
     startWatching();
     return () => {
@@ -103,17 +94,16 @@ export default function GeofenceGuard({ children }: GeofenceGuardProps) {
     };
   }, []);
 
-  // If inside the campus geofence, render the actual student view
   if (status === "allowed") {
     return <>{children}</>;
   }
 
   return (
-    <div className="min-h-[60vh] flex items-center justify-center p-6 font-sans">
+    <div className="min-h-[60vh] flex items-center justify-center p-6 bg-white rounded-[2rem] border border-slate-100 shadow-sm font-sans w-full">
       
       {/* 1. VERIFYING LOCATION STATE */}
       {status === "checking" && (
-        <div className="flex flex-col items-center justify-center p-10 bg-white rounded-[2rem] shadow-xl border border-slate-100 text-center animate-in fade-in zoom-in-95 duration-500 max-w-sm w-full">
+        <div className="flex flex-col items-center justify-center p-10 text-center animate-in fade-in zoom-in-95 duration-300 max-w-sm w-full">
           <div className="relative w-24 h-24 mb-8 flex items-center justify-center">
             <div className="absolute inset-0 rounded-full border-4 border-slate-100"></div>
             <div className="absolute inset-0 rounded-full border-4 border-slate-900 border-t-transparent animate-spin"></div>
@@ -131,7 +121,7 @@ export default function GeofenceGuard({ children }: GeofenceGuardProps) {
 
       {/* 2. OUTSIDE CAMPUS PERIMETER STATE */}
       {status === "denied" && (
-        <div className="flex flex-col items-center justify-center p-8 bg-white rounded-[2rem] shadow-xl border border-slate-100 text-center animate-in zoom-in-95 duration-500 max-w-md w-full relative overflow-hidden">
+        <div className="flex flex-col items-center justify-center p-4 text-center animate-in zoom-in-95 duration-300 max-w-md w-full relative overflow-hidden">
           
           <div className="relative w-24 h-24 mb-6 mt-2 flex items-center justify-center bg-rose-50 rounded-full shadow-inner ring-8 ring-slate-50">
             <div className="absolute inset-0 bg-rose-500 rounded-full animate-ping opacity-10"></div>
@@ -164,7 +154,7 @@ export default function GeofenceGuard({ children }: GeofenceGuardProps) {
 
       {/* 3. BROWSER/HARDWARE ERROR STATE */}
       {status === "error" && (
-        <div className="flex flex-col items-center justify-center p-8 bg-white rounded-[2rem] shadow-xl border border-slate-100 text-center animate-in zoom-in-95 duration-500 max-w-md w-full">
+        <div className="flex flex-col items-center justify-center p-4 text-center animate-in zoom-in-95 duration-300 max-w-md w-full">
           <div className="w-20 h-20 mb-6 flex items-center justify-center bg-amber-50 rounded-full text-amber-500 ring-8 ring-slate-50">
             <AlertTriangle className="w-10 h-10" />
           </div>
