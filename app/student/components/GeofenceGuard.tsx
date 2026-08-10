@@ -27,10 +27,11 @@ export default function GeofenceGuard({ children }: GeofenceGuardProps) {
       { latitude: targetLat, longitude: targetLng }
     );
 
-    console.log(
-      `[WEB GPS] Extension Coords: (${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}) | ` +
-      `Calculated Distance: ${distanceInMeters}m | Allowed Radius: ${maxRadius}m`
-    );
+    if (process.env.NODE_ENV === "development") {
+      console.log(
+        `[WEB GPS] Calculated Distance: ${distanceInMeters}m | Allowed Radius: ${maxRadius}m`
+      );
+    }
 
     if (distanceInMeters <= maxRadius) {
       setStatus("allowed");
