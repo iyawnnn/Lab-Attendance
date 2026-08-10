@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { OAuth2Client } from "google-auth-library";
+
+const googleClient = new OAuth2Client();
 
 export async function POST(request: Request) {
   console.log("[AUTH_GOOGLE] Incoming authentication request received.");
@@ -16,31 +19,38 @@ export async function POST(request: Request) {
       );
     }
 
-    console.log("[AUTH_GOOGLE] Verifying idToken with Google tokeninfo endpoint...");
-    const googleResponse = await fetch(
-      `https://oauth2.googleapis.com/tokeninfo?id_token=${idToken}`
-    );
+    const validClientIds = [
+      process.env.GOOGLE_CLIENT_ID,
+      process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID,
+    ].filter((clientId): clientId is string => Boolean(clientId?.trim()));
 
-    if (!googleResponse.ok) {
-      console.error("[AUTH_GOOGLE] Google token verification failed network check.");
+    if (validClientIds.length === 0) {
+      console.error("[AUTH_GOOGLE] No accepted Google OAuth client ID is configured.");
+      return NextResponse.json(
+        { error: "Google authentication is not configured on the server." },
+        { status: 503 }
+      );
+    }
+
+    let payload;
+    try {
+      const ticket = await googleClient.verifyIdToken({
+        idToken,
+        audience: validClientIds,
+      });
+      payload = ticket.getPayload();
+    } catch {
+      console.warn("[AUTH_GOOGLE] Google ID token verification failed.");
       return NextResponse.json(
         { error: "Invalid identity token provided." },
         { status: 401 }
       );
     }
 
-    const payload = await googleResponse.json();
-
-    const validClientIds = [
-      process.env.GOOGLE_CLIENT_ID,
-      process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID
-    ].filter(Boolean);
-
-    if (validClientIds.length > 0 && !validClientIds.includes(payload.aud)) {
-      console.warn(`[AUTH_GOOGLE] Audience mismatch. Expected: ${validClientIds}, Got: ${payload.aud}`);
+    if (!payload) {
       return NextResponse.json(
-        { error: "Token audience verification failed token origin check." },
-        { status: 403 }
+        { error: "Invalid identity token provided." },
+        { status: 401 }
       );
     }
 

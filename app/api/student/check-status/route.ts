@@ -53,7 +53,7 @@ export async function GET(request: Request) {
     // Strict Single Active Session Enforcement validation layer[cite: 1]
     if (sessionToken && student.session_token !== sessionToken) {
       console.warn(
-        `[CHECK_STATUS] Session token mismatch on ID: ${cleanStudentId}. Client: ${sessionToken}, Database: ${student.session_token}`
+        `[CHECK_STATUS] Session token mismatch on ID: ${cleanStudentId}.`
       );
       return NextResponse.json(
         { 
